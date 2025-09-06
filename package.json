@@ -37,6 +37,16 @@
           "id": "github-history",
           "name": "History",
           "icon": "resources/icon.svg"
+        },
+        {
+          "id": "github-stars",
+          "name": "Starred Repos",
+          "icon": "resources/icon.svg"
+        },
+        {
+          "id": "github-notifications",
+          "name": "Notifications",
+          "icon": "resources/icon.svg"
         }
       ]
     },
@@ -48,6 +58,21 @@
           "light": "resources/light/refresh.svg",
           "dark": "resources/dark/refresh.svg"
         }
+      },
+      {
+        "command": "github-activity-dashboard.createIssue",
+        "title": "Create New Issue",
+        "icon": "$(issues)"
+      },
+      {
+        "command": "github-activity-dashboard.searchRepos",
+        "title": "Search GitHub Repositories",
+        "icon": "$(search)"
+      },
+      {
+        "command": "github-activity-dashboard.unstarRepo",
+        "title": "Unstar Repository",
+        "icon": "$(star-empty)"
       }
     ]
   },

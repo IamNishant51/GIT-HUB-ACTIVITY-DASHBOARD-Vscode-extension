@@ -1,4 +1,4 @@
-{
+  {
   "name": "github-activity-dashboard",
   "displayName": "GitHub Activity Dashboard",
   "description": "A dashboard to track your GitHub activity.",
@@ -32,6 +32,11 @@
           "id": "github-repositories",
           "name": "Repositories",
           "icon": "resources/icon.svg"
+        },
+        {
+          "id": "github-history",
+          "name": "History",
+          "icon": "resources/icon.svg"
         }
       ]
     },
@@ -54,17 +59,18 @@
     "lint": "eslint src --ext ts"
   },
   "devDependencies": {
-    "@types/vscode": "^1.80.0",
     "@types/node": "^20.3.1",
-    "typescript": "^5.1.3",
-    "ts-loader": "^9.4.4",
-    "webpack": "^5.88.1",
-    "webpack-cli": "^5.1.4",
-    "eslint": "^8.44.0",
+    "@types/vscode": "^1.80.0",
+    "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
-    "@typescript-eslint/eslint-plugin": "^5.62.0"
+    "eslint": "^8.44.0",
+    "ts-loader": "^9.4.4",
+    "typescript": "^5.1.3",
+    "webpack": "^5.88.1",
+    "webpack-cli": "^5.1.4"
   },
   "dependencies": {
-    "@octokit/rest": "^20.0.1"
+    "@octokit/rest": "^20.0.1",
+    "simple-git": "^3.28.0"
   }
 }

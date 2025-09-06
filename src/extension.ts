@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { Octokit } from '@octokit/rest';
+import simpleGit from 'simple-git';
 
 class GitHubActivityProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<vscode.TreeItem | undefined | null | void> = new vscode.EventEmitter<vscode.TreeItem | undefined | null | void>();
@@ -213,6 +214,61 @@ class GitHubRepoProvider implements vscode.TreeDataProvider<RepoTreeItem> {
     }
 }
 
+class GitHubHistoryProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
+    private _onDidChangeTreeData: vscode.EventEmitter<vscode.TreeItem | undefined | null | void> = new vscode.EventEmitter<vscode.TreeItem | undefined | null | void>();
+    readonly onDidChangeTreeData: vscode.Event<vscode.TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
+
+    constructor() {}
+
+    refresh(): void {
+        this._onDidChangeTreeData.fire();
+    }
+
+    getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
+        return element;
+    }
+
+    async getChildren(element?: vscode.TreeItem): Promise<vscode.TreeItem[]> {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            return [new vscode.TreeItem('No workspace folder open.', vscode.TreeItemCollapsibleState.None)];
+        }
+
+        try {
+            const git = simpleGit(workspaceFolder.uri.fsPath);
+            if (!await git.checkIsRepo()) {
+                return [new vscode.TreeItem('Not a git repository.', vscode.TreeItemCollapsibleState.None)];
+            }
+
+            const log = await git.log({ maxCount: 20 });
+
+            if (log.all.length === 0) {
+                return [new vscode.TreeItem('No commits found.', vscode.TreeItemCollapsibleState.None)];
+            }
+
+            return log.all.map(commit => {
+                const commitItem = new vscode.TreeItem(
+                    commit.message,
+                    vscode.TreeItemCollapsibleState.None
+                );
+                commitItem.description = `${commit.author_name} - ${new Date(commit.date).toLocaleDateString()}`;
+                commitItem.tooltip = `${commit.hash}\n${commit.author_name} - ${commit.date}\n\n${commit.message}`;
+                commitItem.command = {
+                    command: 'github-activity-dashboard.checkoutCommit',
+                    title: 'Checkout Commit',
+                    arguments: [commit.hash]
+                };
+                commitItem.iconPath = new vscode.ThemeIcon('git-commit');
+                return commitItem;
+            });
+
+        } catch (err: any) {
+            console.error("Failed to get git history:", err);
+            return [new vscode.TreeItem(`Error: ${err.message}`, vscode.TreeItemCollapsibleState.None)];
+        }
+    }
+}
+
 export function activate(context: vscode.ExtensionContext) {
     const githubActivityProvider = new GitHubActivityProvider();
     vscode.window.registerTreeDataProvider('github-activity-dashboard', githubActivityProvider);
@@ -220,9 +276,30 @@ export function activate(context: vscode.ExtensionContext) {
     const githubRepoProvider = new GitHubRepoProvider();
     vscode.window.registerTreeDataProvider('github-repositories', githubRepoProvider);
 
+    const githubHistoryProvider = new GitHubHistoryProvider();
+    vscode.window.registerTreeDataProvider('github-history', githubHistoryProvider);
+
     vscode.commands.registerCommand('github-activity-dashboard.refresh', () => {
         githubActivityProvider.refresh();
         githubRepoProvider.refresh();
+        githubHistoryProvider.refresh();
+    });
+
+    vscode.commands.registerCommand('github-activity-dashboard.checkoutCommit', async (commitHash: string) => {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (workspaceFolder) {
+            const git = simpleGit(workspaceFolder.uri.fsPath);
+            try {
+                await git.checkout(commitHash);
+                vscode.window.showInformationMessage(`Checked out commit ${commitHash.substring(0, 7)}`);
+                // Refresh all providers after checkout
+                githubActivityProvider.refresh();
+                githubRepoProvider.refresh();
+                githubHistoryProvider.refresh();
+            } catch (err: any) {
+                vscode.window.showErrorMessage(`Failed to checkout commit: ${err.message}`);
+            }
+        }
     });
 
     vscode.commands.registerCommand('github-activity-dashboard.openFile', async (item: RepoTreeItem) => {
@@ -239,9 +316,47 @@ export function activate(context: vscode.ExtensionContext) {
         });
 
         const content = Buffer.from(blob.data.content, 'base64').toString('utf8');
-        const doc = await vscode.workspace.openTextDocument({ content, language: item.label.split('.').pop() });
+        const fileExtension = item.label.split('.').pop();
+        const languageId = getLanguageId(fileExtension || '');
+        const doc = await vscode.workspace.openTextDocument({ content, language: languageId });
         await vscode.window.showTextDocument(doc, { preview: true });
     });
+}
+
+function getLanguageId(extension: string): string {
+    const languageMap: { [key: string]: string } = {
+        'js': 'javascript',
+        'ts': 'typescript',
+        'jsx': 'javascriptreact',
+        'tsx': 'typescriptreact',
+        'py': 'python',
+        'java': 'java',
+        'cpp': 'cpp',
+        'c': 'c',
+        'cs': 'csharp',
+        'php': 'php',
+        'rb': 'ruby',
+        'go': 'go',
+        'rs': 'rust',
+        'swift': 'swift',
+        'kt': 'kotlin',
+        'scala': 'scala',
+        'sh': 'shellscript',
+        'ps1': 'powershell',
+        'sql': 'sql',
+        'html': 'html',
+        'css': 'css',
+        'scss': 'scss',
+        'sass': 'sass',
+        'less': 'less',
+        'json': 'json',
+        'xml': 'xml',
+        'yaml': 'yaml',
+        'yml': 'yaml',
+        'md': 'markdown',
+        'txt': 'plaintext'
+    };
+    return languageMap[extension.toLowerCase()] || 'plaintext';
 }
 
 export function deactivate() {}

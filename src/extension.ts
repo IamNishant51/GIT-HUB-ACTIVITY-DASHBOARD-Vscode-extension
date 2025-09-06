@@ -442,11 +442,11 @@ class GitHubProfileProvider implements vscode.TreeDataProvider<vscode.TreeItem> 
             ];
 
             // Add command to open profile
-            const openProfileItem = new vscode.TreeItem('🔗 Open GitHub Profile', vscode.TreeItemCollapsibleState.None);
+            const openProfileItem = new vscode.TreeItem('🔗 View Profile in VS Code', vscode.TreeItemCollapsibleState.None);
             openProfileItem.command = {
-                command: 'vscode.open',
-                title: 'Open Profile',
-                arguments: [vscode.Uri.parse(userData.html_url)]
+                command: 'github-activity-dashboard.openProfile',
+                title: 'Open Profile in VS Code',
+                arguments: []
             };
             profileItems.push(openProfileItem);
 
@@ -544,6 +544,32 @@ export function activate(context: vscode.ExtensionContext) {
         githubStarsProvider.refresh();
         githubNotificationsProvider.refresh();
         githubProfileProvider.refresh();
+    });
+
+    vscode.commands.registerCommand('github-activity-dashboard.openProfile', async () => {
+        try {
+            const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
+            const octokit = new Octokit({ auth: session.accessToken });
+            const user = await octokit.users.getAuthenticated();
+            const userData = user.data;
+
+            // Create and show the webview panel
+            const panel = vscode.window.createWebviewPanel(
+                'githubProfile',
+                `GitHub Profile - ${userData.login}`,
+                vscode.ViewColumn.One,
+                {
+                    enableScripts: true,
+                    retainContextWhenHidden: true
+                }
+            );
+
+            // Generate the HTML content for the profile
+            panel.webview.html = getProfileWebviewContent(userData);
+
+        } catch (err: any) {
+            vscode.window.showErrorMessage(`Failed to load profile: ${err.message}`);
+        }
     });
 
     vscode.commands.registerCommand('github-activity-dashboard.openStarredFile', async (item: StarredRepoTreeItem) => {
@@ -693,6 +719,191 @@ export function activate(context: vscode.ExtensionContext) {
         const doc = await vscode.workspace.openTextDocument({ content, language: languageId });
         await vscode.window.showTextDocument(doc, { preview: true });
     });
+}
+
+function getProfileWebviewContent(userData: any): string {
+    return `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>GitHub Profile</title>
+            <style>
+                body {
+                    font-family: var(--vscode-font-family);
+                    color: var(--vscode-editor-foreground);
+                    background-color: var(--vscode-editor-background);
+                    padding: 20px;
+                    margin: 0;
+                }
+                .profile-header {
+                    display: flex;
+                    align-items: center;
+                    margin-bottom: 30px;
+                    padding: 20px;
+                    background-color: var(--vscode-sideBar-background);
+                    border-radius: 8px;
+                    border: 1px solid var(--vscode-panel-border);
+                }
+                .profile-avatar {
+                    width: 100px;
+                    height: 100px;
+                    border-radius: 50%;
+                    margin-right: 20px;
+                    border: 3px solid var(--vscode-focusBorder);
+                }
+                .profile-info h1 {
+                    margin: 0 0 10px 0;
+                    color: var(--vscode-textLink-foreground);
+                }
+                .profile-info p {
+                    margin: 5px 0;
+                    color: var(--vscode-descriptionForeground);
+                }
+                .stats-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                    gap: 15px;
+                    margin-bottom: 30px;
+                }
+                .stat-card {
+                    background-color: var(--vscode-sideBar-background);
+                    padding: 15px;
+                    border-radius: 8px;
+                    border: 1px solid var(--vscode-panel-border);
+                    text-align: center;
+                }
+                .stat-number {
+                    font-size: 24px;
+                    font-weight: bold;
+                    color: var(--vscode-textLink-foreground);
+                    display: block;
+                }
+                .stat-label {
+                    color: var(--vscode-descriptionForeground);
+                    font-size: 14px;
+                    margin-top: 5px;
+                }
+                .profile-section {
+                    background-color: var(--vscode-sideBar-background);
+                    padding: 20px;
+                    border-radius: 8px;
+                    border: 1px solid var(--vscode-panel-border);
+                    margin-bottom: 20px;
+                }
+                .profile-section h2 {
+                    margin-top: 0;
+                    color: var(--vscode-textLink-foreground);
+                    border-bottom: 1px solid var(--vscode-panel-border);
+                    padding-bottom: 10px;
+                }
+                .info-row {
+                    display: flex;
+                    margin: 10px 0;
+                    align-items: center;
+                }
+                .info-icon {
+                    margin-right: 10px;
+                    width: 20px;
+                }
+                .external-link {
+                    color: var(--vscode-textLink-foreground);
+                    text-decoration: none;
+                    margin-top: 20px;
+                    display: inline-block;
+                    padding: 10px 20px;
+                    background-color: var(--vscode-button-background);
+                    border-radius: 4px;
+                }
+                .external-link:hover {
+                    background-color: var(--vscode-button-hoverBackground);
+                }
+            </style>
+        </head>
+        <body>
+            <div class="profile-header">
+                <img src="${userData.avatar_url}" alt="Profile Avatar" class="profile-avatar">
+                <div class="profile-info">
+                    <h1>${userData.name || userData.login}</h1>
+                    <p><strong>@${userData.login}</strong></p>
+                    ${userData.bio ? `<p>${userData.bio}</p>` : ''}
+                </div>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <span class="stat-number">${userData.public_repos}</span>
+                    <div class="stat-label">Public Repositories</div>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-number">${userData.followers}</span>
+                    <div class="stat-label">Followers</div>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-number">${userData.following}</span>
+                    <div class="stat-label">Following</div>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-number">${userData.public_gists}</span>
+                    <div class="stat-label">Public Gists</div>
+                </div>
+            </div>
+
+            <div class="profile-section">
+                <h2>📋 Profile Information</h2>
+                ${userData.company ? `
+                    <div class="info-row">
+                        <span class="info-icon">🏢</span>
+                        <span><strong>Company:</strong> ${userData.company}</span>
+                    </div>
+                ` : ''}
+                ${userData.location ? `
+                    <div class="info-row">
+                        <span class="info-icon">📍</span>
+                        <span><strong>Location:</strong> ${userData.location}</span>
+                    </div>
+                ` : ''}
+                ${userData.email ? `
+                    <div class="info-row">
+                        <span class="info-icon">📧</span>
+                        <span><strong>Email:</strong> ${userData.email}</span>
+                    </div>
+                ` : ''}
+                ${userData.blog ? `
+                    <div class="info-row">
+                        <span class="info-icon">🌐</span>
+                        <span><strong>Website:</strong> <a href="${userData.blog}" class="external-link" style="padding: 2px 8px; margin: 0;">${userData.blog}</a></span>
+                    </div>
+                ` : ''}
+                ${userData.twitter_username ? `
+                    <div class="info-row">
+                        <span class="info-icon">🐦</span>
+                        <span><strong>Twitter:</strong> @${userData.twitter_username}</span>
+                    </div>
+                ` : ''}
+                <div class="info-row">
+                    <span class="info-icon">📅</span>
+                    <span><strong>Joined GitHub:</strong> ${new Date(userData.created_at).toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                    })}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-icon">🔄</span>
+                    <span><strong>Last Updated:</strong> ${new Date(userData.updated_at).toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                    })}</span>
+                </div>
+            </div>
+
+            <a href="${userData.html_url}" class="external-link">🔗 View Full Profile on GitHub</a>
+        </body>
+        </html>
+    `;
 }
 
 function getLanguageId(extension: string): string {

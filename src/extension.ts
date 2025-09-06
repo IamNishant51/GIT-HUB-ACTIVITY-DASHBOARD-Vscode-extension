@@ -574,6 +574,37 @@ export function activate(context: vscode.ExtensionContext) {
             // Generate the HTML content for the profile
             panel.webview.html = getProfileWebviewContent(userData, repositories);
 
+            // Handle messages from the webview
+            panel.webview.onDidReceiveMessage(
+                async message => {
+                    switch (message.command) {
+                        case 'openRepo':
+                            try {
+                                const repoUrl = message.repoUrl;
+                                const repoName = message.repoName;
+                                
+                                // Show progress while cloning
+                                vscode.window.withProgress({
+                                    location: vscode.ProgressLocation.Notification,
+                                    title: `Opening ${repoName}...`,
+                                    cancellable: false
+                                }, async (progress) => {
+                                    progress.report({ message: 'Setting up workspace' });
+                                    
+                                    // Open the repository in a new window
+                                    const uri = vscode.Uri.parse(repoUrl);
+                                    await vscode.commands.executeCommand('git.clone', uri);
+                                });
+                            } catch (error: any) {
+                                vscode.window.showErrorMessage(`Failed to open repository: ${error.message}`);
+                            }
+                            break;
+                    }
+                },
+                undefined,
+                context.subscriptions
+            );
+
         } catch (err: any) {
             vscode.window.showErrorMessage(`Failed to load profile: ${err.message}`);
         }
@@ -737,282 +768,434 @@ function getProfileWebviewContent(userData: any, repositories: any[] = []): stri
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>GitHub Profile</title>
             <style>
-                body {
-                    font-family: var(--vscode-font-family);
-                    color: var(--vscode-editor-foreground);
-                    background-color: var(--vscode-editor-background);
-                    padding: 20px;
+                * {
                     margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
                 }
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+                    background-color: #0d1117;
+                    color: #e6edf3;
+                    line-height: 1.5;
+                    overflow-x: hidden;
+                }
+                .container {
+                    max-width: 1280px;
+                    margin: 0 auto;
+                    padding: 24px;
+                }
+                
+                /* Profile Header */
                 .profile-header {
                     display: flex;
-                    align-items: center;
-                    margin-bottom: 30px;
-                    padding: 20px;
-                    background-color: var(--vscode-sideBar-background);
-                    border-radius: 8px;
-                    border: 1px solid var(--vscode-panel-border);
+                    gap: 24px;
+                    margin-bottom: 32px;
+                    padding: 0;
+                }
+                .profile-avatar-section {
+                    flex-shrink: 0;
                 }
                 .profile-avatar {
-                    width: 100px;
-                    height: 100px;
+                    width: 296px;
+                    height: 296px;
                     border-radius: 50%;
-                    margin-right: 20px;
-                    border: 3px solid var(--vscode-focusBorder);
+                    border: 1px solid #30363d;
                 }
-                .profile-info h1 {
-                    margin: 0 0 10px 0;
-                    color: var(--vscode-textLink-foreground);
+                .profile-info {
+                    flex: 1;
+                    padding-top: 16px;
                 }
-                .profile-info p {
-                    margin: 5px 0;
-                    color: var(--vscode-descriptionForeground);
+                .profile-name {
+                    font-size: 26px;
+                    font-weight: 600;
+                    color: #f0f6fc;
+                    margin-bottom: 4px;
                 }
-                .stats-grid {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                    gap: 15px;
-                    margin-bottom: 30px;
+                .profile-username {
+                    font-size: 20px;
+                    font-weight: 300;
+                    color: #7d8590;
+                    margin-bottom: 16px;
                 }
-                .stat-card {
-                    background-color: var(--vscode-sideBar-background);
-                    padding: 15px;
-                    border-radius: 8px;
-                    border: 1px solid var(--vscode-panel-border);
-                    text-align: center;
+                .profile-bio {
+                    font-size: 16px;
+                    margin-bottom: 16px;
+                    color: #e6edf3;
+                }
+                
+                /* Profile Stats */
+                .profile-stats {
+                    display: flex;
+                    gap: 16px;
+                    margin-bottom: 16px;
+                }
+                .stat-item {
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                    font-size: 14px;
+                    color: #7d8590;
                 }
                 .stat-number {
-                    font-size: 24px;
-                    font-weight: bold;
-                    color: var(--vscode-textLink-foreground);
-                    display: block;
+                    font-weight: 600;
+                    color: #f0f6fc;
                 }
-                .stat-label {
-                    color: var(--vscode-descriptionForeground);
-                    font-size: 14px;
-                    margin-top: 5px;
-                }
-                .profile-section {
-                    background-color: var(--vscode-sideBar-background);
-                    padding: 20px;
-                    border-radius: 8px;
-                    border: 1px solid var(--vscode-panel-border);
-                    margin-bottom: 20px;
-                }
-                .profile-section h2 {
-                    margin-top: 0;
-                    color: var(--vscode-textLink-foreground);
-                    border-bottom: 1px solid var(--vscode-panel-border);
-                    padding-bottom: 10px;
-                }
-                .info-row {
+                
+                /* Profile Details */
+                .profile-details {
                     display: flex;
-                    margin: 10px 0;
+                    flex-direction: column;
+                    gap: 8px;
+                }
+                .detail-item {
+                    display: flex;
                     align-items: center;
+                    gap: 8px;
+                    font-size: 14px;
+                    color: #e6edf3;
                 }
-                .info-icon {
-                    margin-right: 10px;
-                    width: 20px;
+                .detail-icon {
+                    width: 16px;
+                    height: 16px;
+                    color: #7d8590;
                 }
-                .external-link {
-                    color: var(--vscode-textLink-foreground);
-                    text-decoration: none;
-                    margin-top: 20px;
-                    display: inline-block;
-                    padding: 10px 20px;
-                    background-color: var(--vscode-button-background);
-                    border-radius: 4px;
+                
+                /* Repositories Section */
+                .repos-section {
+                    margin-top: 32px;
                 }
-                .external-link:hover {
-                    background-color: var(--vscode-button-hoverBackground);
+                .repos-header {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    margin-bottom: 16px;
+                    padding-bottom: 8px;
+                    border-bottom: 1px solid #21262d;
                 }
+                .repos-title {
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: #f0f6fc;
+                }
+                .repos-count {
+                    background-color: #21262d;
+                    color: #e6edf3;
+                    font-size: 12px;
+                    font-weight: 500;
+                    padding: 0 6px;
+                    border-radius: 2em;
+                    line-height: 18px;
+                }
+                
+                /* Repository Grid */
                 .repos-grid {
                     display: grid;
                     grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-                    gap: 15px;
-                    margin-top: 15px;
+                    gap: 16px;
                 }
                 .repo-card {
-                    background-color: var(--vscode-sideBar-background);
-                    border: 1px solid var(--vscode-panel-border);
-                    border-radius: 8px;
-                    padding: 15px;
-                    transition: border-color 0.2s ease;
+                    border: 1px solid #21262d;
+                    border-radius: 6px;
+                    padding: 16px;
+                    background-color: #0d1117;
+                    transition: border-color 0.2s;
+                    cursor: pointer;
+                    position: relative;
                 }
                 .repo-card:hover {
-                    border-color: var(--vscode-focusBorder);
+                    border-color: #30363d;
                 }
                 .repo-header {
                     display: flex;
-                    justify-content: space-between;
                     align-items: flex-start;
-                    margin-bottom: 10px;
+                    justify-content: space-between;
+                    margin-bottom: 8px;
                 }
                 .repo-name {
-                    margin: 0;
-                    font-size: 1.1em;
+                    font-size: 14px;
                     font-weight: 600;
+                    color: #2f81f7;
+                    text-decoration: none;
+                    margin: 0;
+                    line-height: 1.25;
                 }
-                .repo-badge {
-                    font-size: 0.8em;
-                    padding: 2px 8px;
-                    border-radius: 12px;
-                    white-space: nowrap;
+                .repo-name:hover {
+                    text-decoration: underline;
                 }
-                .repo-badge.private {
-                    background-color: rgba(255, 107, 107, 0.2);
-                    color: #ff6b6b;
+                .repo-visibility {
+                    font-size: 12px;
+                    font-weight: 500;
+                    padding: 0 7px;
+                    border-radius: 2em;
+                    border: 1px solid #21262d;
+                    color: #7d8590;
+                    line-height: 18px;
+                    margin-left: 8px;
                 }
-                .repo-badge.public {
-                    background-color: rgba(76, 175, 80, 0.2);
-                    color: #4caf50;
+                .repo-visibility.public {
+                    color: #7d8590;
+                }
+                .repo-visibility.private {
+                    color: #f85149;
+                    border-color: #f85149;
                 }
                 .repo-description {
-                    color: var(--vscode-descriptionForeground);
-                    margin: 0 0 10px 0;
-                    font-size: 0.9em;
-                    line-height: 1.4;
+                    font-size: 12px;
+                    color: #7d8590;
+                    margin-bottom: 8px;
+                    line-height: 1.33;
+                    display: -webkit-box;
+                    -webkit-line-clamp: 2;
+                    -webkit-box-orient: vertical;
+                    overflow: hidden;
                 }
-                .repo-stats {
+                .repo-footer {
                     display: flex;
-                    gap: 15px;
-                    flex-wrap: wrap;
+                    align-items: center;
+                    gap: 16px;
+                    font-size: 12px;
+                    color: #7d8590;
                 }
-                .repo-stat {
-                    font-size: 0.85em;
-                    color: var(--vscode-descriptionForeground);
+                .repo-meta {
                     display: flex;
                     align-items: center;
                     gap: 4px;
                 }
+                .repo-language-color {
+                    width: 12px;
+                    height: 12px;
+                    border-radius: 50%;
+                }
+                .language-javascript { background-color: #f1e05a; }
+                .language-typescript { background-color: #3178c6; }
+                .language-python { background-color: #3572A5; }
+                .language-java { background-color: #b07219; }
+                .language-html { background-color: #e34c26; }
+                .language-css { background-color: #563d7c; }
+                .language-c { background-color: #555555; }
+                .language-cpp { background-color: #f34b7d; }
+                .language-csharp { background-color: #239120; }
+                .language-go { background-color: #00ADD8; }
+                .language-rust { background-color: #dea584; }
+                .language-php { background-color: #4F5D95; }
+                .language-ruby { background-color: #701516; }
+                .language-swift { background-color: #fa7343; }
+                .language-kotlin { background-color: #A97BFF; }
+                .language-dart { background-color: #00B4AB; }
+                .language-default { background-color: #586069; }
+                
+                /* Star and Fork Icons */
+                .star-icon, .fork-icon {
+                    width: 12px;
+                    height: 12px;
+                    fill: currentColor;
+                }
+                
+                /* Updated timestamp */
+                .repo-updated {
+                    font-size: 12px;
+                    color: #7d8590;
+                    margin-left: auto;
+                }
+                
+                /* Footer */
+                .profile-footer {
+                    margin-top: 32px;
+                    padding-top: 16px;
+                    border-top: 1px solid #21262d;
+                    text-align: center;
+                }
+                .github-link {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 8px;
+                    padding: 5px 16px;
+                    border: 1px solid #30363d;
+                    border-radius: 6px;
+                    background-color: #21262d;
+                    color: #f0f6fc;
+                    text-decoration: none;
+                    font-size: 14px;
+                    font-weight: 500;
+                    transition: background-color 0.2s;
+                }
+                .github-link:hover {
+                    background-color: #30363d;
+                }
+                
+                /* Responsive */
+                @media (max-width: 768px) {
+                    .profile-header {
+                        flex-direction: column;
+                        align-items: center;
+                        text-align: center;
+                    }
+                    .profile-avatar {
+                        width: 200px;
+                        height: 200px;
+                    }
+                    .repos-grid {
+                        grid-template-columns: 1fr;
+                    }
+                }
             </style>
         </head>
         <body>
-            <div class="profile-header">
-                <img src="${userData.avatar_url}" alt="Profile Avatar" class="profile-avatar">
-                <div class="profile-info">
-                    <h1>${userData.name || userData.login}</h1>
-                    <p><strong>@${userData.login}</strong></p>
-                    ${userData.bio ? `<p>${userData.bio}</p>` : ''}
-                </div>
-            </div>
-
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <span class="stat-number">${userData.public_repos}</span>
-                    <div class="stat-label">Public Repositories</div>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-number">${userData.followers}</span>
-                    <div class="stat-label">Followers</div>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-number">${userData.following}</span>
-                    <div class="stat-label">Following</div>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-number">${userData.public_gists}</span>
-                    <div class="stat-label">Public Gists</div>
-                </div>
-            </div>
-
-            <div class="profile-section">
-                <h2>📋 Profile Information</h2>
-                ${userData.company ? `
-                    <div class="info-row">
-                        <span class="info-icon">🏢</span>
-                        <span><strong>Company:</strong> ${userData.company}</span>
+            <div class="container">
+                <!-- Profile Header -->
+                <div class="profile-header">
+                    <div class="profile-avatar-section">
+                        <img src="${userData.avatar_url}" alt="${userData.name || userData.login}" class="profile-avatar">
                     </div>
-                ` : ''}
-                ${userData.location ? `
-                    <div class="info-row">
-                        <span class="info-icon">📍</span>
-                        <span><strong>Location:</strong> ${userData.location}</span>
-                    </div>
-                ` : ''}
-                ${userData.email ? `
-                    <div class="info-row">
-                        <span class="info-icon">📧</span>
-                        <span><strong>Email:</strong> ${userData.email}</span>
-                    </div>
-                ` : ''}
-                ${userData.blog ? `
-                    <div class="info-row">
-                        <span class="info-icon">🌐</span>
-                        <span><strong>Website:</strong> <a href="${userData.blog}" class="external-link" style="padding: 2px 8px; margin: 0;">${userData.blog}</a></span>
-                    </div>
-                ` : ''}
-                ${userData.twitter_username ? `
-                    <div class="info-row">
-                        <span class="info-icon">🐦</span>
-                        <span><strong>Twitter:</strong> @${userData.twitter_username}</span>
-                    </div>
-                ` : ''}
-                <div class="info-row">
-                    <span class="info-icon">📅</span>
-                    <span><strong>Joined GitHub:</strong> ${new Date(userData.created_at).toLocaleDateString('en-US', { 
-                        year: 'numeric', 
-                        month: 'long', 
-                        day: 'numeric' 
-                    })}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-icon">🔄</span>
-                    <span><strong>Last Updated:</strong> ${new Date(userData.updated_at).toLocaleDateString('en-US', { 
-                        year: 'numeric', 
-                        month: 'long', 
-                        day: 'numeric' 
-                    })}</span>
-                </div>
-            </div>
-
-            <div class="profile-section">
-                <h2>📁 Repositories (${repositories.length})</h2>
-                <div class="repos-grid">
-                    ${repositories.map(repo => `
-                        <div class="repo-card">
-                            <div class="repo-header">
-                                <h3 class="repo-name">
-                                    <a href="${repo.html_url}" target="_blank" style="color: var(--vscode-textLink-foreground); text-decoration: none;">
-                                        ${repo.name}
-                                    </a>
-                                </h3>
-                                ${repo.private ? '<span class="repo-badge private">🔒 Private</span>' : '<span class="repo-badge public">🌐 Public</span>'}
+                    <div class="profile-info">
+                        <h1 class="profile-name">${userData.name || userData.login}</h1>
+                        <h2 class="profile-username">${userData.login}</h2>
+                        ${userData.bio ? `<p class="profile-bio">${userData.bio}</p>` : ''}
+                        
+                        <div class="profile-stats">
+                            <div class="stat-item">
+                                <svg class="star-icon" viewBox="0 0 16 16">
+                                    <path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/>
+                                </svg>
+                                <span class="stat-number">${userData.public_repos}</span> repositories
                             </div>
-                            ${repo.description ? `<p class="repo-description">${repo.description}</p>` : ''}
-                            <div class="repo-stats">
-                                <span class="repo-stat">
-                                    <span style="color: #f1c40f;">⭐</span> ${repo.stargazers_count}
-                                </span>
-                                <span class="repo-stat">
-                                    <span style="color: #3498db;">🍴</span> ${repo.forks_count}
-                                </span>
-                                ${repo.language ? `<span class="repo-stat">
-                                    <span style="color: var(--vscode-textLink-foreground);">💻</span> ${repo.language}
-                                </span>` : ''}
-                                <span class="repo-stat">
-                                    <span style="color: var(--vscode-descriptionForeground);">📅</span> 
-                                    ${new Date(repo.updated_at).toLocaleDateString()}
-                                </span>
+                            <div class="stat-item">
+                                <span class="stat-number">${userData.followers}</span> followers
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-number">${userData.following}</span> following
                             </div>
                         </div>
-                    `).join('')}
+                        
+                        <div class="profile-details">
+                            ${userData.company ? `
+                                <div class="detail-item">
+                                    <svg class="detail-icon" viewBox="0 0 16 16" fill="currentColor">
+                                        <path d="M1.75 16A1.75 1.75 0 010 14.25V1.75C0 .784.784 0 1.75 0h8.5C11.216 0 12 .784 12 1.75v12.5c0 .085-.006.168-.018.25h2.268a.25.25 0 00.25-.25V8.285a.25.25 0 00-.111-.208l-1.055-.703a.75.75 0 11.832-1.248l1.055.703c.487.325.779.871.779 1.456v5.965A1.75 1.75 0 0114.25 16h-3.5a.75.75 0 01-.197-.026c-.099.017-.2.026-.303.026h-8.5zM9 9a.75.75 0 000-1.5H4.5a.75.75 0 000 1.5H9zM4.5 5.25a.75.75 0 000 1.5h5a.75.75 0 000-1.5h-5z"/>
+                                    </svg>
+                                    ${userData.company}
+                                </div>
+                            ` : ''}
+                            ${userData.location ? `
+                                <div class="detail-item">
+                                    <svg class="detail-icon" viewBox="0 0 16 16" fill="currentColor">
+                                        <path d="M11.536 3.464a5 5 0 010 7.072L8 14.07l-3.536-3.535a5 5 0 117.072-7.07v.001zm-4.95 7.07a3.5 3.5 0 006.895 0L8 6.062 6.586 10.534z"/>
+                                        <circle cx="8" cy="6" r="2"/>
+                                    </svg>
+                                    ${userData.location}
+                                </div>
+                            ` : ''}
+                            ${userData.email ? `
+                                <div class="detail-item">
+                                    <svg class="detail-icon" viewBox="0 0 16 16" fill="currentColor">
+                                        <path d="M1.75 2A1.75 1.75 0 000 3.75v.736a.75.75 0 000 .027v7.737C0 13.216.784 14 1.75 14h12.5A1.75 1.75 0 0016 12.25v-8.5A1.75 1.75 0 0014.25 2H1.75zM14.5 4.07v-.32a.25.25 0 00-.25-.25H1.75a.25.25 0 00-.25.25v.32L8 7.88l6.5-3.81zm-13 1.74v6.441c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25V5.809L8.38 9.397a.75.75 0 01-.76 0L1.5 5.809z"/>
+                                    </svg>
+                                    ${userData.email}
+                                </div>
+                            ` : ''}
+                            ${userData.blog ? `
+                                <div class="detail-item">
+                                    <svg class="detail-icon" viewBox="0 0 16 16" fill="currentColor">
+                                        <path d="M7.775 3.275a.75.75 0 001.06 1.06l1.25-1.25a2 2 0 112.83 2.83l-2.5 2.5a2 2 0 01-2.83 0 .75.75 0 00-1.06 1.06 3.5 3.5 0 004.95 0l2.5-2.5a3.5 3.5 0 00-4.95-4.95l-1.25 1.25zm-4.69 9.64a2 2 0 010-2.83l2.5-2.5a2 2 0 012.83 0 .75.75 0 001.06-1.06 3.5 3.5 0 00-4.95 0l-2.5 2.5a3.5 3.5 0 004.95 4.95l1.25-1.25a.75.75 0 00-1.06-1.06l-1.25 1.25a2 2 0 01-2.83 0z"/>
+                                    </svg>
+                                    <a href="${userData.blog}" target="_blank" style="color: #2f81f7; text-decoration: none;">${userData.blog}</a>
+                                </div>
+                            ` : ''}
+                            <div class="detail-item">
+                                <svg class="detail-icon" viewBox="0 0 16 16" fill="currentColor">
+                                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+                                </svg>
+                                Joined ${new Date(userData.created_at).toLocaleDateString('en-US', { 
+                                    year: 'numeric', 
+                                    month: 'long'
+                                })}
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </div>
 
-            <a href="${userData.html_url}" class="external-link">🔗 View Full Profile on GitHub</a>
+                <!-- Repositories Section -->
+                <div class="repos-section">
+                    <div class="repos-header">
+                        <h2 class="repos-title">Repositories</h2>
+                        <span class="repos-count">${repositories.length}</span>
+                    </div>
+                    
+                    <div class="repos-grid">
+                        ${repositories.map(repo => `
+                            <div class="repo-card" onclick="openRepository('${repo.clone_url}', '${repo.name}')">
+                                <div class="repo-header">
+                                    <div style="display: flex; align-items: center;">
+                                        <h3 class="repo-name">${repo.name}</h3>
+                                        <span class="repo-visibility ${repo.private ? 'private' : 'public'}">
+                                            ${repo.private ? 'Private' : 'Public'}
+                                        </span>
+                                    </div>
+                                </div>
+                                ${repo.description ? `<p class="repo-description">${repo.description}</p>` : ''}
+                                <div class="repo-footer">
+                                    ${repo.language ? `
+                                        <div class="repo-meta">
+                                            <span class="repo-language-color language-${repo.language.toLowerCase()}"></span>
+                                            ${repo.language}
+                                        </div>
+                                    ` : ''}
+                                    <div class="repo-meta">
+                                        <svg class="star-icon" viewBox="0 0 16 16" fill="currentColor">
+                                            <path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/>
+                                        </svg>
+                                        ${repo.stargazers_count}
+                                    </div>
+                                    <div class="repo-meta">
+                                        <svg class="fork-icon" viewBox="0 0 16 16" fill="currentColor">
+                                            <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878z"/>
+                                        </svg>
+                                        ${repo.forks_count}
+                                    </div>
+                                    <span class="repo-updated">Updated ${(() => {
+                                        const date = new Date(repo.updated_at);
+                                        const now = new Date();
+                                        const diff = now.getTime() - date.getTime();
+                                        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                                        
+                                        if (days === 0) return 'today';
+                                        if (days === 1) return 'yesterday';
+                                        if (days < 30) return days + ' days ago';
+                                        if (days < 365) return Math.floor(days / 30) + ' months ago';
+                                        return Math.floor(days / 365) + ' years ago';
+                                    })()}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="profile-footer">
+                    <a href="${userData.html_url}" target="_blank" class="github-link">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+                                        </svg>
+                                        View on GitHub
+                                    </a>
+                                </div>
+                            </div>
+
+            <script>
+                const vscode = acquireVsCodeApi();
+                
+                function openRepository(repoUrl, repoName) {
+                    vscode.postMessage({
+                        command: 'openRepo',
+                        repoUrl: repoUrl,
+                        repoName: repoName
+                    });
+                }
+            </script>
         </body>
         </html>
     `;
-
-    function escapeHtml(text: string): string {
-        return text
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-    }
 }
 
 function getLanguageId(extension: string): string {

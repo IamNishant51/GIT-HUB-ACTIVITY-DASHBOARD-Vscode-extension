@@ -269,7 +269,129 @@ class GitHubHistoryProvider implements vscode.TreeDataProvider<vscode.TreeItem> 
     }
 }
 
-class GitHubStarsProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
+class StarredRepoTreeItem extends vscode.TreeItem {
+    constructor(
+        public readonly label: string,
+        public readonly collapsibleState: vscode.TreeItemCollapsibleState,
+        public readonly repoInfo?: {
+            owner: string,
+            repo: string,
+            path?: string,
+            type: string,
+            sha?: string,
+            url?: string
+        }
+    ) {
+        super(label, collapsibleState);
+
+        if (repoInfo?.type === 'file') {
+            this.command = {
+                command: 'github-activity-dashboard.openStarredFile',
+                title: 'Open File',
+                arguments: [this]
+            };
+            this.iconPath = new vscode.ThemeIcon('file');
+        } else if (repoInfo?.type === 'dir') {
+            this.iconPath = new vscode.ThemeIcon('folder');
+        } else if (repoInfo?.type === 'repo') {
+            this.iconPath = new vscode.ThemeIcon('repo');
+            this.contextValue = 'starredRepo';
+        }
+    }
+}
+
+class GitHubStarsProvider implements vscode.TreeDataProvider<StarredRepoTreeItem> {
+    private _onDidChangeTreeData: vscode.EventEmitter<StarredRepoTreeItem | undefined | null | void> = new vscode.EventEmitter<StarredRepoTreeItem | undefined | null | void>();
+    readonly onDidChangeTreeData: vscode.Event<StarredRepoTreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
+
+    private octokit: Octokit | undefined;
+
+    constructor() {
+        this.initializeOctokit();
+    }
+
+    private async initializeOctokit() {
+        try {
+            const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
+            this.octokit = new Octokit({ auth: session.accessToken });
+            this.refresh();
+        } catch (error) {
+            vscode.window.showErrorMessage('Could not authenticate with GitHub.');
+        }
+    }
+
+    refresh(): void {
+        this._onDidChangeTreeData.fire();
+    }
+
+    getTreeItem(element: StarredRepoTreeItem): vscode.TreeItem {
+        return element;
+    }
+
+    async getChildren(element?: StarredRepoTreeItem): Promise<StarredRepoTreeItem[]> {
+        if (!this.octokit) {
+            return [];
+        }
+
+        if (element && element.repoInfo) {
+            // It's a repository or directory, fetch its content
+            const { owner, repo, path } = element.repoInfo;
+            if (element.repoInfo.type === 'repo' || element.repoInfo.type === 'dir') {
+                try {
+                    const contents = await this.octokit.repos.getContent({ 
+                        owner, 
+                        repo, 
+                        path: path || '' 
+                    });
+                    
+                    if (Array.isArray(contents.data)) {
+                        return contents.data.map(item => 
+                            new StarredRepoTreeItem(
+                                item.name, 
+                                item.type === 'dir' ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None, 
+                                { 
+                                    owner, 
+                                    repo, 
+                                    path: item.path, 
+                                    type: item.type, 
+                                    sha: item.sha 
+                                }
+                            )
+                        );
+                    }
+                } catch (err: any) {
+                    return [new StarredRepoTreeItem(`Error: ${err.message}`, vscode.TreeItemCollapsibleState.None)];
+                }
+            }
+            return [];
+        } else {
+            // It's the root, show starred repositories
+            try {
+                const starred = await this.octokit.activity.listReposStarredByAuthenticatedUser();
+                
+                return starred.data.map(repo => {
+                    const item = new StarredRepoTreeItem(
+                        repo.name, 
+                        vscode.TreeItemCollapsibleState.Collapsed,
+                        {
+                            owner: repo.owner.login,
+                            repo: repo.name,
+                            type: 'repo',
+                            url: repo.html_url
+                        }
+                    );
+                    item.description = `⭐ ${repo.stargazers_count}`;
+                    item.tooltip = `${repo.full_name}\n⭐ ${repo.stargazers_count} stars\n🍴 ${repo.forks_count} forks\n\n${repo.description || 'No description'}`;
+                    return item;
+                });
+            } catch (err: any) {
+                return [new StarredRepoTreeItem(`Error: ${err.message}`, vscode.TreeItemCollapsibleState.None)];
+            }
+        }
+    }
+}
+
+class GitHubProfileProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<vscode.TreeItem | undefined | null | void> = new vscode.EventEmitter<vscode.TreeItem | undefined | null | void>();
     readonly onDidChangeTreeData: vscode.Event<vscode.TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
@@ -303,21 +425,33 @@ class GitHubStarsProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
         }
 
         try {
-            const starred = await this.octokit.activity.listReposStarredByAuthenticatedUser();
-            
-            return starred.data.map(repo => {
-                const item = new vscode.TreeItem(repo.name, vscode.TreeItemCollapsibleState.None);
-                item.description = repo.description || '';
-                item.tooltip = `${repo.full_name}\n⭐ ${repo.stargazers_count} stars\n🍴 ${repo.forks_count} forks\n\n${repo.description || 'No description'}`;
-                item.command = {
-                    command: 'vscode.open',
-                    title: 'Open Repository',
-                    arguments: [vscode.Uri.parse(repo.html_url)]
-                };
-                item.contextValue = 'starredRepo';
-                item.iconPath = new vscode.ThemeIcon('star-full');
-                return item;
-            });
+            const user = await this.octokit.users.getAuthenticated();
+            const userData = user.data;
+
+            const profileItems = [
+                new vscode.TreeItem(`👤 ${userData.name || userData.login}`, vscode.TreeItemCollapsibleState.None),
+                new vscode.TreeItem(`📧 ${userData.email || 'Private'}`, vscode.TreeItemCollapsibleState.None),
+                new vscode.TreeItem(`🏢 ${userData.company || 'No company'}`, vscode.TreeItemCollapsibleState.None),
+                new vscode.TreeItem(`📍 ${userData.location || 'No location'}`, vscode.TreeItemCollapsibleState.None),
+                new vscode.TreeItem(`📝 ${userData.bio || 'No bio'}`, vscode.TreeItemCollapsibleState.None),
+                new vscode.TreeItem(`📊 ${userData.public_repos} public repos`, vscode.TreeItemCollapsibleState.None),
+                new vscode.TreeItem(`👥 ${userData.followers} followers`, vscode.TreeItemCollapsibleState.None),
+                new vscode.TreeItem(`👤 ${userData.following} following`, vscode.TreeItemCollapsibleState.None),
+                new vscode.TreeItem(`⭐ ${userData.public_gists} public gists`, vscode.TreeItemCollapsibleState.None),
+                new vscode.TreeItem(`📅 Joined ${new Date(userData.created_at).toLocaleDateString()}`, vscode.TreeItemCollapsibleState.None)
+            ];
+
+            // Add command to open profile
+            const openProfileItem = new vscode.TreeItem('🔗 Open GitHub Profile', vscode.TreeItemCollapsibleState.None);
+            openProfileItem.command = {
+                command: 'vscode.open',
+                title: 'Open Profile',
+                arguments: [vscode.Uri.parse(userData.html_url)]
+            };
+            profileItems.push(openProfileItem);
+
+            return profileItems;
+
         } catch (err: any) {
             return [new vscode.TreeItem(`Error: ${err.message}`, vscode.TreeItemCollapsibleState.None)];
         }
@@ -400,12 +534,43 @@ export function activate(context: vscode.ExtensionContext) {
     const githubNotificationsProvider = new GitHubNotificationsProvider();
     vscode.window.registerTreeDataProvider('github-notifications', githubNotificationsProvider);
 
+    const githubProfileProvider = new GitHubProfileProvider();
+    vscode.window.registerTreeDataProvider('github-profile', githubProfileProvider);
+
     vscode.commands.registerCommand('github-activity-dashboard.refresh', () => {
         githubActivityProvider.refresh();
         githubRepoProvider.refresh();
         githubHistoryProvider.refresh();
         githubStarsProvider.refresh();
         githubNotificationsProvider.refresh();
+        githubProfileProvider.refresh();
+    });
+
+    vscode.commands.registerCommand('github-activity-dashboard.openStarredFile', async (item: StarredRepoTreeItem) => {
+        if (!item.repoInfo?.owner || !item.repoInfo?.repo || !item.repoInfo?.sha) return;
+        
+        const octokit = new Octokit({ 
+            auth: (await vscode.authentication.getSession('github', ['repo'], { createIfNone: true })).accessToken 
+        });
+
+        try {
+            const blob = await octokit.git.getBlob({
+                owner: item.repoInfo.owner,
+                repo: item.repoInfo.repo,
+                file_sha: item.repoInfo.sha
+            });
+
+            const content = Buffer.from(blob.data.content, 'base64').toString('utf8');
+            const fileExtension = item.label.split('.').pop();
+            const languageId = getLanguageId(fileExtension || '');
+            const doc = await vscode.workspace.openTextDocument({ 
+                content, 
+                language: languageId 
+            });
+            await vscode.window.showTextDocument(doc, { preview: true });
+        } catch (err: any) {
+            vscode.window.showErrorMessage(`Failed to open file: ${err.message}`);
+        }
     });
 
     vscode.commands.registerCommand('github-activity-dashboard.createIssue', async () => {

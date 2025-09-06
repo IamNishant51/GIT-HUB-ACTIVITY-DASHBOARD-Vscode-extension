@@ -47,6 +47,11 @@
           "id": "github-notifications",
           "name": "Notifications",
           "icon": "resources/icon.svg"
+        },
+        {
+          "id": "github-profile",
+          "name": "Profile",
+          "icon": "resources/icon.svg"
         }
       ]
     },

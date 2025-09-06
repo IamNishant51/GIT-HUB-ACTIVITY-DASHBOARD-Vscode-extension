@@ -553,6 +553,13 @@ export function activate(context: vscode.ExtensionContext) {
             const user = await octokit.users.getAuthenticated();
             const userData = user.data;
 
+            // Fetch user's repositories
+            const reposResponse = await octokit.repos.listForAuthenticatedUser({
+                sort: 'updated',
+                per_page: 50
+            });
+            const repositories = reposResponse.data;
+
             // Create and show the webview panel
             const panel = vscode.window.createWebviewPanel(
                 'githubProfile',
@@ -565,7 +572,7 @@ export function activate(context: vscode.ExtensionContext) {
             );
 
             // Generate the HTML content for the profile
-            panel.webview.html = getProfileWebviewContent(userData);
+            panel.webview.html = getProfileWebviewContent(userData, repositories);
 
         } catch (err: any) {
             vscode.window.showErrorMessage(`Failed to load profile: ${err.message}`);
@@ -721,7 +728,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 }
 
-function getProfileWebviewContent(userData: any): string {
+function getProfileWebviewContent(userData: any, repositories: any[] = []): string {
     return `
         <!DOCTYPE html>
         <html lang="en">
@@ -819,6 +826,65 @@ function getProfileWebviewContent(userData: any): string {
                 .external-link:hover {
                     background-color: var(--vscode-button-hoverBackground);
                 }
+                .repos-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+                    gap: 15px;
+                    margin-top: 15px;
+                }
+                .repo-card {
+                    background-color: var(--vscode-sideBar-background);
+                    border: 1px solid var(--vscode-panel-border);
+                    border-radius: 8px;
+                    padding: 15px;
+                    transition: border-color 0.2s ease;
+                }
+                .repo-card:hover {
+                    border-color: var(--vscode-focusBorder);
+                }
+                .repo-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: flex-start;
+                    margin-bottom: 10px;
+                }
+                .repo-name {
+                    margin: 0;
+                    font-size: 1.1em;
+                    font-weight: 600;
+                }
+                .repo-badge {
+                    font-size: 0.8em;
+                    padding: 2px 8px;
+                    border-radius: 12px;
+                    white-space: nowrap;
+                }
+                .repo-badge.private {
+                    background-color: rgba(255, 107, 107, 0.2);
+                    color: #ff6b6b;
+                }
+                .repo-badge.public {
+                    background-color: rgba(76, 175, 80, 0.2);
+                    color: #4caf50;
+                }
+                .repo-description {
+                    color: var(--vscode-descriptionForeground);
+                    margin: 0 0 10px 0;
+                    font-size: 0.9em;
+                    line-height: 1.4;
+                }
+                .repo-stats {
+                    display: flex;
+                    gap: 15px;
+                    flex-wrap: wrap;
+                }
+                .repo-stat {
+                    font-size: 0.85em;
+                    color: var(--vscode-descriptionForeground);
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                }
             </style>
         </head>
         <body>
@@ -900,10 +966,53 @@ function getProfileWebviewContent(userData: any): string {
                 </div>
             </div>
 
+            <div class="profile-section">
+                <h2>📁 Repositories (${repositories.length})</h2>
+                <div class="repos-grid">
+                    ${repositories.map(repo => `
+                        <div class="repo-card">
+                            <div class="repo-header">
+                                <h3 class="repo-name">
+                                    <a href="${repo.html_url}" target="_blank" style="color: var(--vscode-textLink-foreground); text-decoration: none;">
+                                        ${repo.name}
+                                    </a>
+                                </h3>
+                                ${repo.private ? '<span class="repo-badge private">🔒 Private</span>' : '<span class="repo-badge public">🌐 Public</span>'}
+                            </div>
+                            ${repo.description ? `<p class="repo-description">${repo.description}</p>` : ''}
+                            <div class="repo-stats">
+                                <span class="repo-stat">
+                                    <span style="color: #f1c40f;">⭐</span> ${repo.stargazers_count}
+                                </span>
+                                <span class="repo-stat">
+                                    <span style="color: #3498db;">🍴</span> ${repo.forks_count}
+                                </span>
+                                ${repo.language ? `<span class="repo-stat">
+                                    <span style="color: var(--vscode-textLink-foreground);">💻</span> ${repo.language}
+                                </span>` : ''}
+                                <span class="repo-stat">
+                                    <span style="color: var(--vscode-descriptionForeground);">📅</span> 
+                                    ${new Date(repo.updated_at).toLocaleDateString()}
+                                </span>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
             <a href="${userData.html_url}" class="external-link">🔗 View Full Profile on GitHub</a>
         </body>
         </html>
     `;
+
+    function escapeHtml(text: string): string {
+        return text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
 }
 
 function getLanguageId(extension: string): string {

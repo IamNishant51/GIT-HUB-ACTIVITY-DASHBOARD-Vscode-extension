@@ -14,9 +14,7 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onView:github-dashboard-container"
-  ],
+  "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -63,11 +61,6 @@
       ]
     },
     "commands": [
-      {
-        "command": "github-activity-dashboard.openProfile",
-        "title": "Open GitHub Profile",
-        "icon": "$(account)"
-      },
       {
         "command": "github-activity-dashboard.refresh",
         "title": "Refresh GitHub Activity",

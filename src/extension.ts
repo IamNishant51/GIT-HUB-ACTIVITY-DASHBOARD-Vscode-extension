@@ -646,6 +646,7 @@ function generateEnhancedContributionGraph(commentActivity: { [key: string]: num
     return html;
 }
 
+// Function to ensure profile is always visible
 export function activate(context: vscode.ExtensionContext) {
     // Store context globally
     extensionContext = context;
@@ -667,11 +668,13 @@ export function activate(context: vscode.ExtensionContext) {
     const githubProfileProvider = new GitHubProfileProvider();
     vscode.window.registerTreeDataProvider('github-profile', githubProfileProvider);
 
-    // Create tree view for profile to enable revealing
-    const profileTreeView = vscode.window.createTreeView('github-profile', {
-        treeDataProvider: githubProfileProvider
-    });
-    context.subscriptions.push(profileTreeView);
+    // Register tree data providers
+    vscode.window.registerTreeDataProvider('github-activity-dashboard', githubActivityProvider);
+    vscode.window.registerTreeDataProvider('github-repositories', githubRepoProvider);
+    vscode.window.registerTreeDataProvider('github-history', githubHistoryProvider);
+    vscode.window.registerTreeDataProvider('github-stars', githubStarsProvider);
+    vscode.window.registerTreeDataProvider('github-notifications', githubNotificationsProvider);
+    vscode.window.registerTreeDataProvider('github-profile', githubProfileProvider);
 
     const githubProfileReposProvider = new GitHubProfileReposProvider();
     vscode.window.registerTreeDataProvider('github-profile-repos', githubProfileReposProvider);
@@ -685,16 +688,16 @@ export function activate(context: vscode.ExtensionContext) {
 
     console.log('Profile Repositories tree view created:', profileReposTreeView ? 'YES' : 'NO');
 
-    // Automatically reveal the profile section when extension is activated
+    // Automatically reveal the profile section and open profile when extension is activated
     setTimeout(() => {
         vscode.commands.executeCommand('workbench.view.extension.github-dashboard-container');
         vscode.commands.executeCommand('github-activity-dashboard.refresh');
         
-        // Reveal the profile view
-        profileTreeView.reveal(null as any, { select: true, focus: true });
-        
         // Also reveal the profile repos view
         profileReposTreeView.reveal(null as any, { select: false, focus: false });
+
+        // Open the profile directly - simple approach
+        vscode.commands.executeCommand('github-activity-dashboard.openProfile');
     }, 1000);
 
     vscode.commands.registerCommand('github-activity-dashboard.refresh', async () => {
@@ -711,7 +714,7 @@ export function activate(context: vscode.ExtensionContext) {
         console.log('RefreshProfile command called with data:', data);
         console.log('ActiveProfilePanel status:', !!activeProfilePanel, 'Visible:', activeProfilePanel?.visible);
         
-        if (activeProfilePanel && activeProfilePanel.visible) {
+        if (activeProfilePanel) {
             try {
                 console.log('Refreshing profile panel...');
                 const session = await vscode.authentication.getSession('github', ['repo', 'delete_repo'], { createIfNone: true });
@@ -724,11 +727,15 @@ export function activate(context: vscode.ExtensionContext) {
                 });
                 
                 console.log('Sending repoCreated message to webview with', reposResponse.data.length, 'repositories');
-                activeProfilePanel.webview.postMessage({
+                console.log('Panel webview exists:', !!activeProfilePanel.webview);
+                
+                await activeProfilePanel.webview.postMessage({
                     command: 'repoCreated',
                     repositories: reposResponse.data,
                     message: data?.repoName ? `Repository "${data.repoName}" created successfully!` : 'Repositories updated'
                 });
+                
+                console.log('Message sent successfully');
             } catch (error) {
                 console.error('Error refreshing profile:', error);
             }
@@ -796,6 +803,20 @@ export function activate(context: vscode.ExtensionContext) {
 
     vscode.commands.registerCommand('github-activity-dashboard.openProfile', async () => {
         try {
+            // Simple check: if activeProfilePanel exists, just reveal it
+            if (activeProfilePanel) {
+                console.log('Profile panel already exists, revealing it');
+                try {
+                    activeProfilePanel.reveal(vscode.ViewColumn.One);
+                    return;
+                } catch (error) {
+                    // Panel might be disposed, clear the reference
+                    console.log('Panel was disposed, clearing reference');
+                    activeProfilePanel = undefined;
+                }
+            }
+
+            console.log('Creating new profile panel...');
             const session = await vscode.authentication.getSession('github', ['repo', 'delete_repo'], { createIfNone: true });
             const octokit = new Octokit({ auth: session.accessToken });
         const user = await octokit.users.getAuthenticated();
@@ -1085,7 +1106,7 @@ export function activate(context: vscode.ExtensionContext) {
                 `GitHub Profile - ${userData.login}`,
                 vscode.ViewColumn.One,
                 {
-            enableScripts: true
+                    enableScripts: true
                 }
             );
 
@@ -1123,28 +1144,78 @@ export function activate(context: vscode.ExtensionContext) {
                             try {
                                 const owner = message.owner;
                                 const repo = message.repo;
-                                console.log(`[WebView] Clicked on repo: ${owner}/${repo}. Attempting to reveal in tree view.`);
+                                console.log(`Opening repository explorer for: ${owner}/${repo}`);
 
-                                // Get the current list of top-level tree items from the provider
-                                const children = await githubProfileReposProvider.getChildren();
-                                console.log(`[Provider] Found ${children.length} root items in the 'Profile Repos' tree.`);
-                                
-                                const targetRepo = children.find(item => item.repoInfo?.owner === owner && item.repoInfo?.repo === repo);
-                                
-                                if (targetRepo) {
-                                    console.log(`[Success] Found matching tree item for ${owner}/${repo}.`);
-                                    // Focus the view, then reveal and expand the item
-                                    await vscode.commands.executeCommand('github-profile-repos.focus');
-                                    await profileReposTreeView.reveal(targetRepo, { select: true, focus: true, expand: true });
-                                    console.log('[Action] reveal() command executed.');
-                                    panel.dispose(); // Close the webview panel
-                                } else {
-                                    console.error(`[Error] Could not find a matching tree item for ${owner}/${repo}.`);
-                                    vscode.window.showErrorMessage(`Could not find repository ${owner}/${repo} in the list. Please try refreshing the view.`);
-                                }
+                                // Create a new webview panel for repository exploration
+                                const repoPanel = vscode.window.createWebviewPanel(
+                                    'repoExplorer',
+                                    `📁 ${owner}/${repo}`,
+                                    vscode.ViewColumn.One,
+                                    {
+                                        enableScripts: true
+                                    }
+                                );
+
+                                // Fetch repository content from GitHub API
+                                const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
+                                const octokit = new Octokit({ auth: session.accessToken });
+
+                                // Get repository info and default branch
+                                const repoInfo = await octokit.repos.get({ owner, repo });
+                                const defaultBranch = repoInfo.data.default_branch;
+
+                                // Get repository tree structure
+                                const treeResponse = await octokit.git.getTree({
+                                    owner,
+                                    repo,
+                                    tree_sha: defaultBranch,
+                                    recursive: "1"
+                                });
+
+                                // Generate repository explorer HTML
+                                repoPanel.webview.html = getRepositoryExplorerHTML(owner, repo, repoInfo.data, treeResponse.data.tree, repoPanel.webview);
+
+                                // Handle messages from the repository explorer
+                                repoPanel.webview.onDidReceiveMessage(async (message) => {
+                                    if (message.command === 'openFile') {
+                                        try {
+                                            console.log('Fetching file content for:', message.path);
+                                            const fileResponse = await octokit.repos.getContent({
+                                                owner,
+                                                repo,
+                                                path: message.path,
+                                                ref: defaultBranch
+                                            });
+
+                                            if ('content' in fileResponse.data && !Array.isArray(fileResponse.data)) {
+                                                const content = Buffer.from(fileResponse.data.content, 'base64').toString('utf-8');
+                                                console.log('File content fetched successfully, length:', content.length);
+                                                repoPanel.webview.postMessage({
+                                                    command: 'showFileContent',
+                                                    path: message.path,
+                                                    content: content,
+                                                    language: getLanguageFromExtension(message.path),
+                                                    size: fileResponse.data.size
+                                                });
+                                            } else {
+                                                repoPanel.webview.postMessage({
+                                                    command: 'showError',
+                                                    error: 'This appears to be a directory or binary file'
+                                                });
+                                            }
+                                        } catch (error: any) {
+                                            console.error('Error fetching file:', error);
+                                            repoPanel.webview.postMessage({
+                                                command: 'showError',
+                                                error: `Failed to load file: ${error?.message || 'Unknown error'}`
+                                            });
+                                        }
+                                    }
+                                });
+
                             } catch (error: any) {
                                 console.error('Error in "openRepo" message handler:', error);
-                                vscode.window.showErrorMessage(`Failed to open repository view: ${error.message}`);
+                                vscode.window.showErrorMessage(`Failed to open repository: ${error.message}`);
                             }
                             break;
                         case 'openOrg':
@@ -1578,59 +1649,144 @@ export function activate(context: vscode.ExtensionContext) {
                 localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'resources')]
             }
         );
-        const nonce = getNonce();
-        panel.webview.html = getRepoExplorerWebviewContent(panel.webview, nonce, context.extensionUri, owner, repo, path);
 
-        // Fetch repo contents from GitHub and send to webview
+        // Fetch repo info and tree from GitHub
         const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
         const octokit = new Octokit({ auth: session.accessToken });
+        
         try {
-            const contents = await octokit.repos.getContent({ owner, repo, path });
-            let html = '<ul class="repo-list">';
-            if (Array.isArray(contents.data)) {
-                for (const item of contents.data) {
-                    const icon = item.type === 'dir' ? 'codicon-folder' : 'codicon-file';
-                    const size = item.size ? ` (${(item.size / 1024).toFixed(1)} KB)` : '';
-                    html += `<li class="repo-item" data-path="${item.path}" data-type="${item.type}">
-                        <span class="codicon ${icon} repo-item-icon"></span>
-                        <span class="repo-item-name">${item.name}</span>
-                        <span class="repo-item-size">${size}</span>
-                    </li>`;
-                }
-            } else {
-                html += `<li class="repo-item" data-path="${contents.data.path}" data-type="file">
-                    <span class="codicon codicon-file repo-item-icon"></span>
-                    <span class="repo-item-name">${contents.data.name}</span>
-                    <span class="repo-item-size"> (${(contents.data.size / 1024).toFixed(1)} KB)</span>
-                </li>`;
+            // Get repository info
+            const repoInfo = await octokit.rest.repos.get({ owner, repo });
+            
+            // Get repository tree (try main branch first, then master)
+            let tree;
+            try {
+                tree = await octokit.rest.git.getTree({
+                    owner,
+                    repo,
+                    tree_sha: 'main',
+                    recursive: 'true'
+                });
+            } catch (error: any) {
+                console.log('Main branch not found, trying master...');
+                tree = await octokit.rest.git.getTree({
+                    owner,
+                    repo,
+                    tree_sha: 'master',
+                    recursive: 'true'
+                });
             }
-            html += '</ul>';
-            panel.webview.postMessage({ command: 'updateExplorer', html });
+            
+            // Set the HTML content with the new repository explorer
+            panel.webview.html = getRepositoryExplorerHTML(owner, repo, repoInfo.data, tree.data.tree, panel.webview);
             
             // Handle navigation and file opening
             panel.webview.onDidReceiveMessage(async message => {
-                if (message.command === 'navigate' && message.path) {
-                    vscode.commands.executeCommand('github-activity-dashboard.exploreRepo', owner, repo, message.path);
-                    panel.dispose();
-                } else if (message.command === 'openFile' && message.path) {
-                    // Open file in VS Code
-                    try {
-                        const fileContent = await octokit.git.getBlob({
-                            owner,
-                            repo,
-                            file_sha: (Array.isArray(contents.data) ? contents.data.find(item => item.path === message.path)?.sha : contents.data.sha) || ''
-                        });
-                        const content = Buffer.from(fileContent.data.content, 'base64').toString('utf8');
-                        const fileExtension = message.path.split('.').pop();
-                        const languageId = getLanguageId(fileExtension || '');
-                        const doc = await vscode.workspace.openTextDocument({ 
-                            content, 
-                            language: languageId 
-                        });
-                        await vscode.window.showTextDocument(doc, { preview: true });
-                    } catch (error: any) {
-                        vscode.window.showErrorMessage(`Failed to open file: ${error.message}`);
-                    }
+                switch (message.command) {
+                    case 'openFile':
+                        try {
+                            console.log(`Fetching file content for: ${message.path}`);
+                            
+                            // Get file content from GitHub API
+                            const response = await octokit.rest.repos.getContent({
+                                owner: owner,
+                                repo: repo,
+                                path: message.path,
+                                ref: 'main' // Try main branch first
+                            });
+                            
+                            console.log('GitHub API response:', response.data);
+                            
+                            if (Array.isArray(response.data)) {
+                                throw new Error('Path is a directory, not a file');
+                            }
+                            
+                            const fileData = response.data as any;
+                            
+                            if (fileData.type !== 'file') {
+                                throw new Error('Selected item is not a file');
+                            }
+                            
+                            let content = '';
+                            if (fileData.content) {
+                                try {
+                                    // Decode base64 content
+                                    content = Buffer.from(fileData.content, 'base64').toString('utf-8');
+                                    console.log(`Successfully decoded file content (${content.length} characters)`);
+                                } catch (decodeError) {
+                                    console.error('Error decoding file content:', decodeError);
+                                    content = 'Error: Unable to decode file content';
+                                }
+                            } else {
+                                content = 'File is empty or content not available';
+                            }
+                            
+                            // Send content to webview
+                            panel.webview.postMessage({
+                                command: 'showFileContent',
+                                path: message.path,
+                                content: content,
+                                size: fileData.size || 0
+                            });
+                            
+                        } catch (error: any) {
+                            console.error('Error fetching file:', error);
+                            
+                            // Try with master branch if main fails
+                            if (error.status === 409 || error.message.includes('Git Repository is empty')) {
+                                try {
+                                    const response = await octokit.rest.repos.getContent({
+                                        owner: owner,
+                                        repo: repo,
+                                        path: message.path,
+                                        ref: 'master'
+                                    });
+                                    
+                                    if (Array.isArray(response.data)) {
+                                        throw new Error('Path is a directory, not a file');
+                                    }
+                                    
+                                    const fileData = response.data as any;
+                                    let content = '';
+                                    if (fileData.content) {
+                                        content = Buffer.from(fileData.content, 'base64').toString('utf-8');
+                                    }
+                                    
+                                    panel.webview.postMessage({
+                                        command: 'showFileContent',
+                                        path: message.path,
+                                        content: content,
+                                        size: fileData.size || 0
+                                    });
+                                    
+                                } catch (masterError: any) {
+                                    let errorMessage = 'Unknown error occurred';
+                                    if (masterError.status === 404) {
+                                        errorMessage = `File not found: ${message.path}`;
+                                    } else if (masterError.message) {
+                                        errorMessage = masterError.message;
+                                    }
+                                    
+                                    panel.webview.postMessage({
+                                        command: 'showError',
+                                        error: errorMessage
+                                    });
+                                }
+                            } else {
+                                let errorMessage = 'Unknown error occurred';
+                                if (error.status === 404) {
+                                    errorMessage = `File not found: ${message.path}`;
+                                } else if (error.message) {
+                                    errorMessage = error.message;
+                                }
+                                
+                                panel.webview.postMessage({
+                                    command: 'showError',
+                                    error: errorMessage
+                                });
+                            }
+                        }
+                        break;
                 }
             });
         } catch (err) {
@@ -1640,9 +1796,548 @@ export function activate(context: vscode.ExtensionContext) {
             } else if (typeof err === 'object' && err && 'message' in err) {
                 message = (err as any).message;
             }
-            panel.webview.postMessage({ command: 'updateExplorer', html: `<div class="error">Failed to load repository: ${message}</div>` });
+            panel.webview.html = `
+                <html>
+                    <body style="font-family: var(--vscode-font-family); padding: 20px;">
+                        <div style="color: var(--vscode-errorForeground); background: var(--vscode-inputValidation-errorBackground); padding: 20px; border-radius: 4px;">
+                            <h3>Failed to load repository</h3>
+                            <p>${message}</p>
+                        </div>
+                    </body>
+                </html>
+            `;
         }
     });
+}
+
+function getLanguageFromExtension(filePath: string): string {
+    const extension = filePath.split('.').pop()?.toLowerCase();
+    const languageMap: { [key: string]: string } = {
+        'js': 'javascript',
+        'jsx': 'javascript',
+        'ts': 'typescript',
+        'tsx': 'typescript',
+        'py': 'python',
+        'java': 'java',
+        'cpp': 'cpp',
+        'c': 'c',
+        'cs': 'csharp',
+        'php': 'php',
+        'rb': 'ruby',
+        'go': 'go',
+        'rs': 'rust',
+        'swift': 'swift',
+        'kt': 'kotlin',
+        'scala': 'scala',
+        'html': 'html',
+        'css': 'css',
+        'scss': 'scss',
+        'sass': 'sass',
+        'less': 'less',
+        'json': 'json',
+        'xml': 'xml',
+        'yaml': 'yaml',
+        'yml': 'yaml',
+        'md': 'markdown',
+        'sh': 'bash',
+        'sql': 'sql',
+        'dockerfile': 'dockerfile'
+    };
+    return languageMap[extension || ''] || 'plaintext';
+}
+
+function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, tree: any[], webview: vscode.Webview): string {
+    const nonce = getNonce();
+    
+    // Organize files by directory
+    const fileStructure: { [key: string]: any[] } = {};
+    const rootFiles: any[] = [];
+    
+    tree.forEach(item => {
+        if (item.type === 'blob') {
+            const pathParts = item.path.split('/');
+            if (pathParts.length === 1) {
+                rootFiles.push(item);
+            } else {
+                const dir = pathParts[0];
+                if (!fileStructure[dir]) {
+                    fileStructure[dir] = [];
+                }
+                fileStructure[dir].push(item);
+            }
+        }
+    });
+
+    return `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
+            <title>${owner}/${repo}</title>
+            <style>
+                /* GitHub-like styling */
+                :root {
+                    --color-canvas-default: #0d1117;
+                    --color-canvas-subtle: #161b22;
+                    --color-border-default: #30363d;
+                    --color-border-muted: #21262d;
+                    --color-fg-default: #f0f6fc;
+                    --color-fg-muted: #8b949e;
+                    --color-fg-subtle: #656d76;
+                    --color-accent-fg: #58a6ff;
+                    --color-btn-primary-bg: #238636;
+                    --color-btn-primary-hover-bg: #2ea043;
+                }
+                
+                * {
+                    box-sizing: border-box;
+                }
+                
+                body {
+                    font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif;
+                    font-size: 14px;
+                    line-height: 1.5;
+                    margin: 0;
+                    padding: 0;
+                    background: var(--color-canvas-default);
+                    color: var(--color-fg-default);
+                    overflow: hidden;
+                }
+                
+                .container {
+                    display: flex;
+                    height: 100vh;
+                    background: var(--color-canvas-default);
+                }
+                
+                .sidebar {
+                    width: 360px;
+                    border-right: 1px solid var(--color-border-default);
+                    background: var(--color-canvas-default);
+                    display: flex;
+                    flex-direction: column;
+                }
+                
+                .repo-header {
+                    padding: 16px;
+                    border-bottom: 1px solid var(--color-border-default);
+                    background: var(--color-canvas-subtle);
+                }
+                
+                .repo-title {
+                    font-size: 20px;
+                    font-weight: 600;
+                    margin: 0 0 4px 0;
+                    color: var(--color-accent-fg);
+                }
+                
+                .repo-description {
+                    color: var(--color-fg-muted);
+                    font-size: 14px;
+                    margin: 0;
+                }
+                
+                .repo-stats {
+                    display: flex;
+                    gap: 16px;
+                    margin-top: 8px;
+                    font-size: 12px;
+                    color: var(--color-fg-muted);
+                }
+                
+                .stat {
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                }
+                
+                .file-tree {
+                    flex: 1;
+                    overflow-y: auto;
+                    padding: 8px 0;
+                }
+                
+                .tree-item {
+                    display: flex;
+                    align-items: center;
+                    padding: 4px 16px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    border: none;
+                    background: none;
+                    color: var(--color-fg-default);
+                    width: 100%;
+                    text-align: left;
+                    position: relative;
+                }
+                
+                .tree-item:hover {
+                    background: var(--color-canvas-subtle);
+                }
+                
+                .tree-item.active {
+                    background: var(--color-accent-fg);
+                    color: #fff;
+                    font-weight: 500;
+                }
+                
+                .tree-item.folder {
+                    font-weight: 500;
+                }
+                
+                .tree-icon {
+                    width: 16px;
+                    height: 16px;
+                    margin-right: 8px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 14px;
+                }
+                
+                .tree-item.folder .tree-icon::before {
+                    content: "📁";
+                }
+                
+                .tree-item.folder.expanded .tree-icon::before {
+                    content: "📂";
+                }
+                
+                .tree-item.file .tree-icon::before {
+                    content: "📄";
+                }
+                
+                .folder-children {
+                    display: none;
+                    margin-left: 24px;
+                }
+                
+                .folder-children.expanded {
+                    display: block;
+                }
+                
+                .folder-children .tree-item {
+                    padding-left: 40px;
+                }
+                
+                .tree-item.folder.expanded .tree-icon::before {
+                    content: "📂";
+                }
+                
+                .main-content {
+                    flex: 1;
+                    display: flex;
+                    flex-direction: column;
+                    background: var(--color-canvas-default);
+                }
+                
+                .file-header {
+                    padding: 12px 16px;
+                    border-bottom: 1px solid var(--color-border-default);
+                    background: var(--color-canvas-subtle);
+                    font-family: SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;
+                    font-size: 14px;
+                    font-weight: 600;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+                
+                .file-icon {
+                    color: var(--color-fg-muted);
+                }
+                
+                .file-content-wrapper {
+                    flex: 1;
+                    overflow: auto;
+                    background: var(--color-canvas-default);
+                }
+                
+                .file-content {
+                    padding: 16px;
+                    font-family: SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;
+                    font-size: 12px;
+                    line-height: 1.45;
+                    white-space: pre;
+                    overflow: auto;
+                    background: var(--color-canvas-default);
+                    color: var(--color-fg-default);
+                    border: 1px solid var(--color-border-default);
+                    border-radius: 6px;
+                    margin: 16px;
+                }
+                
+                .line-numbers {
+                    display: inline-block;
+                    width: 40px;
+                    color: var(--color-fg-subtle);
+                    text-align: right;
+                    margin-right: 16px;
+                    user-select: none;
+                    border-right: 1px solid var(--color-border-muted);
+                    padding-right: 8px;
+                }
+                
+                .welcome-screen {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    height: 100%;
+                    text-align: center;
+                    color: var(--color-fg-muted);
+                    padding: 40px;
+                }
+                
+                .welcome-icon {
+                    font-size: 48px;
+                    margin-bottom: 16px;
+                    opacity: 0.6;
+                }
+                
+                .welcome-title {
+                    font-size: 20px;
+                    font-weight: 600;
+                    margin-bottom: 8px;
+                    color: var(--color-fg-default);
+                }
+                
+                .welcome-subtitle {
+                    font-size: 14px;
+                    color: var(--color-fg-muted);
+                }
+                
+                .loading {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    height: 200px;
+                    color: var(--color-fg-muted);
+                    font-size: 14px;
+                }
+                
+                .error {
+                    color: #f85149;
+                    background: rgba(248, 81, 73, 0.1);
+                    border: 1px solid rgba(248, 81, 73, 0.2);
+                    border-radius: 6px;
+                    padding: 16px;
+                    margin: 16px;
+                    font-size: 14px;
+                }
+                
+                /* Scrollbar styling */
+                ::-webkit-scrollbar {
+                    width: 8px;
+                    height: 8px;
+                }
+                
+                ::-webkit-scrollbar-track {
+                    background: var(--color-canvas-default);
+                }
+                
+                ::-webkit-scrollbar-thumb {
+                    background: var(--color-border-default);
+                    border-radius: 4px;
+                }
+                
+                ::-webkit-scrollbar-thumb:hover {
+                    background: var(--color-fg-subtle);
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="sidebar">
+                    <div class="repo-header">
+                        <h1 class="repo-title">${owner}/${repo}</h1>
+                        <p class="repo-description">${repoInfo.description || 'No description provided'}</p>
+                        <div class="repo-stats">
+                            <div class="stat">
+                                <span>⭐</span>
+                                <span>${repoInfo.stargazers_count || 0}</span>
+                            </div>
+                            <div class="stat">
+                                <span>🍴</span>
+                                <span>${repoInfo.forks_count || 0}</span>
+                            </div>
+                            <div class="stat">
+                                <span>👁️</span>
+                                <span>${repoInfo.watchers_count || 0}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="file-tree">
+                        ${rootFiles.map(file => `
+                            <button class="tree-item file" data-path="${file.path}" data-type="file">
+                                <span class="tree-icon"></span>
+                                ${file.path}
+                            </button>
+                        `).join('')}
+                        ${Object.keys(fileStructure).map(dir => `
+                            <button class="tree-item folder" data-path="${dir}" data-type="folder">
+                                <span class="tree-icon"></span>
+                                ${dir}
+                            </button>
+                            <div class="folder-children" data-folder="${dir}">
+                                ${fileStructure[dir].map(file => `
+                                    <button class="tree-item file" data-path="${file.path}" data-type="file">
+                                        <span class="tree-icon"></span>
+                                        ${file.path.split('/').pop()}
+                                    </button>
+                                `).join('')}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                <div class="main-content">
+                    <div id="file-display">
+                        <div class="welcome-screen">
+                            <div class="welcome-icon">📁</div>
+                            <div class="welcome-title">${owner}/${repo}</div>
+                            <div class="welcome-subtitle">Select a file to view its contents</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <script nonce="${nonce}">
+                const vscode = acquireVsCodeApi();
+                let activeElement = null;
+                
+                // Initialize event listeners when page loads
+                document.addEventListener('DOMContentLoaded', function() {
+                    console.log('DOM Content Loaded - Setting up event listeners');
+                    setupEventListeners();
+                });
+                
+                // Also try to set up immediately in case DOMContentLoaded already fired
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', setupEventListeners);
+                } else {
+                    setupEventListeners();
+                }
+                
+                function setupEventListeners() {
+                    console.log('Setting up event listeners');
+                    const fileTree = document.querySelector('.file-tree');
+                    if (!fileTree) {
+                        console.error('File tree not found');
+                        return;
+                    }
+                    
+                    // Use event delegation for better performance and reliability
+                    fileTree.addEventListener('click', function(event) {
+                        const target = event.target.closest('.tree-item');
+                        if (!target) return;
+                        
+                        const path = target.getAttribute('data-path');
+                        const type = target.getAttribute('data-type');
+                        
+                        console.log('Clicked item:', { path, type, target });
+                        
+                        if (type === 'folder') {
+                            toggleFolder(target, event);
+                        } else if (type === 'file') {
+                            openFile(path, target);
+                        }
+                    });
+                }
+                
+                function toggleFolder(element, event) {
+                    event.stopPropagation();
+                    console.log('Toggling folder:', element);
+                    
+                    const folderPath = element.getAttribute('data-path');
+                    element.classList.toggle('expanded');
+                    
+                    // Find the corresponding folder-children div
+                    const folderChildren = document.querySelector(\`[data-folder="\${folderPath}"]\`);
+                    
+                    if (folderChildren) {
+                        if (element.classList.contains('expanded')) {
+                            folderChildren.classList.add('expanded');
+                            folderChildren.style.display = 'block';
+                            console.log('Expanded folder:', folderPath);
+                        } else {
+                            folderChildren.classList.remove('expanded');
+                            folderChildren.style.display = 'none';
+                            console.log('Collapsed folder:', folderPath);
+                        }
+                    } else {
+                        console.error('Could not find folder children for:', folderPath);
+                    }
+                }
+                
+                function openFile(path, element) {
+                    console.log('Opening file:', path);
+                    
+                    // Clear previous selection
+                    if (activeElement) {
+                        activeElement.classList.remove('active');
+                    }
+                    
+                    // Mark current file as active
+                    element.classList.add('active');
+                    activeElement = element;
+                    
+                    // Show loading
+                    document.getElementById('file-display').innerHTML = \`
+                        <div class="loading">
+                            <span>Loading \${path}...</span>
+                        </div>
+                    \`;
+                    
+                    // Request file content
+                    vscode.postMessage({
+                        command: 'openFile',
+                        path: path
+                    });
+                }
+                
+                // Handle messages from extension
+                window.addEventListener('message', event => {
+                    const message = event.data;
+                    console.log('Received message:', message);
+                    
+                    if (message.command === 'showFileContent') {
+                        const lines = message.content.split('\\n');
+                        const numberedContent = lines.map((line, index) => 
+                            \`<span class="line-numbers">\${index + 1}</span>\${escapeHtml(line)}\`
+                        ).join('\\n');
+                        
+                        document.getElementById('file-display').innerHTML = \`
+                            <div class="file-header">
+                                <span class="file-icon">📄</span>
+                                <span>\${message.path}</span>
+                                <span style="margin-left: auto; color: var(--color-fg-muted); font-size: 12px;">
+                                    \${lines.length} lines • \${Math.round((message.size || 0) / 1024)} KB
+                                </span>
+                            </div>
+                            <div class="file-content-wrapper">
+                                <div class="file-content">\${numberedContent}</div>
+                            </div>
+                        \`;
+                    } else if (message.command === 'showError') {
+                        document.getElementById('file-display').innerHTML = \`
+                            <div class="error">
+                                <strong>Error:</strong> \${message.error}
+                            </div>
+                        \`;
+                    }
+                });
+                
+                function escapeHtml(text) {
+                    const div = document.createElement('div');
+                    div.textContent = text;
+                    return div.innerHTML;
+                }
+            </script>
+        </body>
+        </html>
+    `;
 }
 
 function getProfileWebviewContent(webview: vscode.Webview, userData: any, repositories: any[] = [], organizations: any[] = [], pinnedRepos: any[] = [], recentEvents: any[] = [], topLanguages: [string, number][] = [], starredRepos: any[] = [], recentPullRequests: any[] = [], recentIssues: any[] = [], sponsorsData: any = null, commentActivity: { [key: string]: number } = {}): string {
@@ -2842,7 +3537,7 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                 </div>
 
                 <div class="tabs">
-                    <button class="tab active" data-tab="repositories">Repositories <span class="count" id="repoCount">${repositories.length}</span></button>
+                    <button class="tab active" data-tab="repositories">Repositories <span class="count" id="tabRepoCount">${repositories.length}</span></button>
                     <button class="tab" data-tab="stars">Stars <span class="count" id="starCount">${starredRepos.length}</span></button>
                     <button class="tab" data-tab="activity">Activity</button>
                 </div>
@@ -2851,7 +3546,7 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     <div class="section-title">
                         <span class="codicon codicon-repo"></span>
                         Repositories
-                        <span class="count" id="repoCount">${repositories.length}</span>
+                        <span class="count" id="sectionRepoCount">${repositories.length}</span>
                     </div>
                     <div class="filters">
                         <input id="searchInput" class="input" placeholder="🔍 Search repositories..." />
@@ -3077,7 +3772,13 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     console.log('Button clicked:', { action, owner, repo, target: target.outerHTML });
 
                     if (action === 'open') {
-                        vscode.postMessage({ command: 'openRepo', owner, repo });
+                        const repoData = REPOS.find(r => r.owner.login === owner && r.name === repo);
+                        vscode.postMessage({ 
+                            command: 'openRepo', 
+                            owner, 
+                            repo,
+                            repoUrl: repoData?.clone_url || \`https://github.com/\${owner}/\${repo}.git\`
+                        });
                     } else if (action === 'toggle-star') {
                         const key = owner + '/' + repo;
                         if (starredSet.has(key)) {
@@ -3101,6 +3802,7 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                 // Messages from extension (update UI)
                 window.addEventListener('message', (event) => {
                     const msg = event.data;
+                    console.log('Webview received message:', msg);
                     if (msg.command === 'starToggled') {
                         const key = msg.owner + '/' + msg.repo;
                         if (msg.starred) starredSet.add(key); else starredSet.delete(key);
@@ -3110,12 +3812,19 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                         renderStars();
                     }
                     if (msg.command === 'repoDeleted') {
+                        console.log('Processing repoDeleted message for:', msg.owner + '/' + msg.repo);
                         const key = (msg.owner + '/' + msg.repo).toLowerCase();
                         const keyNormal = msg.owner + '/' + msg.repo;
                         
                         // Remove from repositories array
                         REPOS = msg.repositories || REPOS.filter(r => (r.owner.login + '/' + r.name).toLowerCase() !== key);
-                        document.getElementById('repoCount').textContent = String(REPOS.length);
+                        console.log('Updated REPOS array, new length:', REPOS.length);
+                        
+                        // Update both tab count and section count with proper IDs
+                        const tabRepoCount = document.getElementById('tabRepoCount');
+                        const sectionRepoCount = document.getElementById('sectionRepoCount');
+                        if (tabRepoCount) tabRepoCount.textContent = String(REPOS.length);
+                        if (sectionRepoCount) sectionRepoCount.textContent = String(REPOS.length);
                         
                         // Remove from starred repositories if it was starred
                         if (msg.starredRepos) {
@@ -3161,11 +3870,20 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                         });
                     }
                     if (msg.command === 'repoCreated') {
+                        console.log('Processing repoCreated message with:', msg.repositories?.length, 'repositories');
                         // Update repositories list with newly created repo
                         if (msg.repositories) {
                             REPOS = msg.repositories;
-                            document.getElementById('repoCount').textContent = String(REPOS.length);
+                            console.log('Updated REPOS array, new length:', REPOS.length);
+                            // Update both tab count and section count with proper IDs
+                            const tabRepoCount = document.getElementById('tabRepoCount');
+                            const sectionRepoCount = document.getElementById('sectionRepoCount');
+                            console.log('Found tab count element:', !!tabRepoCount, 'section count element:', !!sectionRepoCount);
+                            if (tabRepoCount) tabRepoCount.textContent = String(REPOS.length);
+                            if (sectionRepoCount) sectionRepoCount.textContent = String(REPOS.length);
+                            
                             applyFilters(); // This will re-render the repositories
+                            console.log('Applied filters and re-rendered repositories');
                             
                             // Show success notification
                             const notification = document.createElement('div');
@@ -3179,6 +3897,8 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                                     notification.remove();
                                 }
                             }, 3000);
+                        } else {
+                            console.error('repoCreated message received but no repositories data');
                         }
                     }
                 });
@@ -3463,7 +4183,7 @@ function getOrganizationWebviewContent(webview: vscode.Webview, orgData: any, re
 
                     <div class="repos-grid">
                         ${repositories.map(repo => `
-                            <div class="repo-card" onclick="openRepository('${repo.clone_url}', '${repo.name}')">
+                            <div class="repo-card" onclick="openRepository('${repo.clone_url}', '${repo.name}', '${repo.owner.login}')">>
                                 <div class="repo-header">
                                     <div style="display: flex; align-items: center;">
                                         <h3 class="repo-name">${repo.name}</h3>
@@ -3520,11 +4240,13 @@ function getOrganizationWebviewContent(webview: vscode.Webview, orgData: any, re
             <script nonce="${nonce}">
                 const vscode = acquireVsCodeApi();
 
-                function openRepository(repoUrl, repoName) {
+                function openRepository(repoUrl, repoName, owner) {
                     vscode.postMessage({
                         command: 'openRepo',
                         repoUrl: repoUrl,
-                        repoName: repoName
+                        repoName: repoName,
+                        owner: owner,
+                        repo: repoName
                     });
                 }
 
@@ -3638,7 +4360,14 @@ function marked(text: string): string {
         .replace(/$/, '</p>');
 }
 
-export function deactivate() {}
+export function deactivate() {
+    // Close the profile panel when extension is deactivated
+    if (activeProfilePanel) {
+        console.log('Extension deactivating, closing profile panel');
+        activeProfilePanel.dispose();
+        activeProfilePanel = undefined;
+    }
+}
 
 // Helper functions
 function getLanguageColor(language: string): string {

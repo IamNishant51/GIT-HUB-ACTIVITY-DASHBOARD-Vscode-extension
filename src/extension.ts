@@ -3,8 +3,9 @@ import { Octokit } from '@octokit/rest';
 import simpleGit from 'simple-git';
 import { getCreateRepoWebviewContent, getRepoExplorerWebviewContent } from './createRepo';
 
-// Global variable to track active profile panel
+// Global variables to track panels
 let activeProfilePanel: vscode.WebviewPanel | undefined;
+let extensionContext: vscode.ExtensionContext;
 
 class GitHubActivityProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<vscode.TreeItem | undefined | null | void> = new vscode.EventEmitter<vscode.TreeItem | undefined | null | void>();
@@ -646,6 +647,8 @@ function generateEnhancedContributionGraph(commentActivity: { [key: string]: num
 }
 
 export function activate(context: vscode.ExtensionContext) {
+    // Store context globally
+    extensionContext = context;
     const githubActivityProvider = new GitHubActivityProvider();
     vscode.window.registerTreeDataProvider('github-activity-dashboard', githubActivityProvider);
 
@@ -704,6 +707,36 @@ export function activate(context: vscode.ExtensionContext) {
         await githubProfileReposProvider.refresh();
     });
 
+    vscode.commands.registerCommand('github-activity-dashboard.refreshProfile', async (data?: any) => {
+        console.log('RefreshProfile command called with data:', data);
+        console.log('ActiveProfilePanel status:', !!activeProfilePanel, 'Visible:', activeProfilePanel?.visible);
+        
+        if (activeProfilePanel && activeProfilePanel.visible) {
+            try {
+                console.log('Refreshing profile panel...');
+                const session = await vscode.authentication.getSession('github', ['repo', 'delete_repo'], { createIfNone: true });
+                const octokit = new Octokit({ auth: session.accessToken });
+                
+                // Fetch updated repositories
+                const reposResponse = await octokit.repos.listForAuthenticatedUser({
+                    sort: 'updated',
+                    per_page: 100
+                });
+                
+                console.log('Sending repoCreated message to webview with', reposResponse.data.length, 'repositories');
+                activeProfilePanel.webview.postMessage({
+                    command: 'repoCreated',
+                    repositories: reposResponse.data,
+                    message: data?.repoName ? `Repository "${data.repoName}" created successfully!` : 'Repositories updated'
+                });
+            } catch (error) {
+                console.error('Error refreshing profile:', error);
+            }
+        } else {
+            console.log('No active profile panel to refresh');
+        }
+    });
+
     vscode.commands.registerCommand('github-activity-dashboard.createRepo', async () => {
         const panel = vscode.window.createWebviewPanel(
             'createRepo',
@@ -738,33 +771,16 @@ export function activate(context: vscode.ExtensionContext) {
                         });
                         vscode.window.showInformationMessage(`Successfully created repository "${message.repoName}"`);
                         
-                        // Fetch updated repositories list for profile webview
-                        try {
-                            const reposResponse = await octokit.repos.listForAuthenticatedUser({
-                                sort: 'updated',
-                                per_page: 100
-                            });
-                            
-                            // Send update to any open profile webviews
-                            const profilePanels = vscode.window.visibleTextEditors.filter(editor => 
-                                editor.document.uri.scheme === 'vscode-webview'
-                            );
-                            
-                            // Find and update profile webviews (we'll need to track them)
-                            // For now, we'll use a global variable to track the main profile panel
-                            if (activeProfilePanel) {
-                                activeProfilePanel.webview.postMessage({
-                                    command: 'repoCreated',
-                                    repositories: reposResponse.data
-                                });
-                            }
-                        } catch (error) {
-                            console.error('Error fetching updated repositories after creation:', error);
-                        }
-                        
                         // Refresh the providers
                         githubRepoProvider.refresh();
                         githubProfileReposProvider.refresh();
+                        
+                        // Trigger profile refresh via command if profile is open
+                        console.log('Repository created, trying to refresh profile. ActiveProfilePanel exists:', !!activeProfilePanel, 'Visible:', activeProfilePanel?.visible);
+                        vscode.commands.executeCommand('github-activity-dashboard.refreshProfile', {
+                            type: 'repoCreated',
+                            repoName: message.repoName
+                        });
 
                         panel.dispose();
                     } catch (error: any) {
@@ -1075,9 +1091,11 @@ export function activate(context: vscode.ExtensionContext) {
 
             // Set as active profile panel
             activeProfilePanel = panel;
+            console.log('Profile panel created and set as active');
             
             // Handle panel disposal
             panel.onDidDispose(() => {
+                console.log('Profile panel disposed');
                 activeProfilePanel = undefined;
             });
 
@@ -3200,7 +3218,7 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                             // Show success notification
                             const notification = document.createElement('div');
                             notification.className = 'success-notification';
-                            notification.textContent = 'Repository created successfully!';
+                            notification.textContent = msg.message || 'Repository created successfully!';
                             notification.style.cssText = 'position: fixed; top: 20px; right: 20px; background: var(--vscode-notificationsInfoIcon-foreground); color: var(--vscode-editor-background); padding: 12px 16px; border-radius: 4px; font-size: 12px; z-index: 1000; animation: slideIn 0.3s ease;';
                             document.body.appendChild(notification);
                             

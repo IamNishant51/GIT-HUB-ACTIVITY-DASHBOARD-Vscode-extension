@@ -82,3 +82,40 @@ npm run watch
 
 # Package for distribution
 npm run package
+
+## Known Issues 🐛
+
+- Webpack may display warnings about the optional `supports-color` dependency from `debug`. This is safe to ignore and doesn't affect functionality.
+- Some GitHub Enterprise features might require additional configuration.
+- Repository loading time may vary based on network connectivity.
+- Large repositories might take longer to display full activity history.
+
+## Release Notes 📝
+
+### Version 1.0.0 (2024-09-07)
+- Initial release
+- GitHub activity dashboard integration
+- Repository browser implementation
+- Notification system integration
+- Profile view functionality
+- Star management features
+
+For full release history, see [CHANGELOG.md](CHANGELOG.md)
+
+## Development 💻
+
+```bash
+# Clone the repository
+git clone https://github.com/IamNishant51/github-activity-dashboard.git
+
+# Install dependencies
+npm install
+
+# Build the extension
+npm run compile
+
+# Watch for changes
+npm run watch
+
+# Package for publishing
+npm run package

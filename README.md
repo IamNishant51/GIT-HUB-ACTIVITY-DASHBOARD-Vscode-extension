@@ -1,10 +1,6 @@
 # GitHub Activity Dashboard 🚀
 
 <p align="center">
-  <img src="images/preview.gif" alt="GitHub Activity Dashboard Preview" width="600">
-</p>
-
-<p align="center">
   <a href="https://code.visualstudio.com/">
     <img src="https://img.shields.io/badge/VS_Code-1.80%2B-blue.svg" alt="VS Code Version">
   </a>
@@ -144,4 +140,4 @@ SOFTWARE.
 ```
 ---
 
-> Made with 💙 by [Nishant Unavane](https://github.com/IamNishant51)
+ Made with ❤️ by [Nishant Unavane](https://github.com/IamNishant51)

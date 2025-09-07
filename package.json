@@ -3,6 +3,7 @@
   "displayName": "GitHub Activity Dashboard",
   "description": "A dashboard to track your GitHub activity.",
   "version": "0.0.2",
+  "icon": "logo.png",
   "publisher": "NishantUnavane",
   "engines": {
     "vscode": "^1.80.0"

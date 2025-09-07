@@ -799,15 +799,25 @@ export function activate(context: vscode.ExtensionContext) {
             const userData = user.data;
 
             // Fetch user's repositories
-            const reposResponse = await octokit.repos.listForAuthenticatedUser({
-                sort: 'updated',
-                per_page: 50
-            });
-            const repositories = reposResponse.data;
+            let repositories: any[] = [];
+            try {
+                const reposResponse = await octokit.repos.listForAuthenticatedUser({
+                    sort: 'updated',
+                    per_page: 50
+                });
+                repositories = reposResponse.data;
+            } catch (error) {
+                console.log('Could not fetch repositories:', error);
+            }
 
             // Fetch user's organizations
-            const orgsResponse = await octokit.orgs.listForAuthenticatedUser();
-            const organizations = orgsResponse.data;
+            let organizations: any[] = [];
+            try {
+                const orgsResponse = await octokit.orgs.listForAuthenticatedUser();
+                organizations = orgsResponse.data;
+            } catch (error) {
+                console.log('Could not fetch organizations:', error);
+            }
 
             // Fetch user's pinned repositories (using GraphQL since REST API doesn't have this)
             let pinnedRepos: any[] = [];
@@ -845,11 +855,16 @@ export function activate(context: vscode.ExtensionContext) {
             }
 
             // Fetch recent activity (events)
-            const eventsResponse = await octokit.activity.listEventsForAuthenticatedUser({
-                username: userData.login,
-                per_page: 20
-            });
-            const recentEvents = eventsResponse.data;
+            let recentEvents: any[] = [];
+            try {
+                const eventsResponse = await octokit.activity.listEventsForAuthenticatedUser({
+                    username: userData.login,
+                    per_page: 20
+                });
+                recentEvents = eventsResponse.data;
+            } catch (error) {
+                console.log('Could not fetch recent events:', error);
+            }
 
             // Fetch user's profile README
             let profileReadme = null;
@@ -923,17 +938,23 @@ export function activate(context: vscode.ExtensionContext) {
                             break;
                         case 'openOrg':
                             try {
-                                const orgUrl = `https://github.com/${message.orgName}`;
-                                await vscode.env.openExternal(vscode.Uri.parse(orgUrl));
+                                await vscode.commands.executeCommand('github-activity-dashboard.openOrganizationProfile', message.orgName);
                             } catch (error: any) {
                                 vscode.window.showErrorMessage(`Failed to open organization: ${error.message}`);
                             }
                             break;
                         case 'openEvent':
                             try {
-                                await vscode.env.openExternal(vscode.Uri.parse(message.eventUrl));
+                                await vscode.commands.executeCommand('github-activity-dashboard.openEventDetails', message.eventUrl);
                             } catch (error: any) {
                                 vscode.window.showErrorMessage(`Failed to open event: ${error.message}`);
+                            }
+                            break;
+                        case 'openProfile':
+                            try {
+                                await vscode.commands.executeCommand('github-activity-dashboard.openUserProfile', message.username);
+                            } catch (error: any) {
+                                vscode.window.showErrorMessage(`Failed to open profile: ${error.message}`);
                             }
                             break;
                     }
@@ -1132,19 +1153,184 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    vscode.commands.registerCommand('github-activity-dashboard.testExpandRepo', async () => {
-        const owner = await vscode.window.showInputBox({
-            prompt: 'Enter repository owner',
-            placeHolder: 'e.g., microsoft'
-        });
+    vscode.commands.registerCommand('github-activity-dashboard.expandProfileRepo', async (owner: string, repo: string) => {
+        try {
+            console.log(`Expanding repository: ${owner}/${repo}`);
+            
+            // Create a new tree item for the repository
+            const repoItem = new ProfileRepoTreeItem(
+                repo,
+                vscode.TreeItemCollapsibleState.Expanded,
+                {
+                    owner: owner,
+                    repo: repo,
+                    type: 'repo',
+                    url: `https://github.com/${owner}/${repo}`
+                }
+            );
+            
+            // Add it to the profile repos tree view
+            if (profileReposTreeView) {
+                // Refresh the tree to show the new repository
+                githubProfileReposProvider.refresh();
+                
+                // Try to reveal the new repository in the tree
+                await profileReposTreeView.reveal(repoItem, { select: true, focus: true });
+            }
+            
+            vscode.window.showInformationMessage(`Repository ${owner}/${repo} expanded in profile view`);
+        } catch (error: any) {
+            console.error('Error expanding profile repo:', error);
+            vscode.window.showErrorMessage(`Failed to expand repository: ${error.message}`);
+        }
+    });
 
-        const repo = await vscode.window.showInputBox({
-            prompt: 'Enter repository name',
-            placeHolder: 'e.g., vscode'
-        });
+    vscode.commands.registerCommand('github-activity-dashboard.openOrganizationProfile', async (orgName: string) => {
+        try {
+            const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
+            const octokit = new Octokit({ auth: session.accessToken });
 
-        if (owner && repo) {
+            // Get organization details
+            const orgResponse = await octokit.orgs.get({ org: orgName });
+            const orgData = orgResponse.data;
+
+            // Get organization repositories
+            const reposResponse = await octokit.repos.listForOrg({
+                org: orgName,
+                sort: 'updated',
+                per_page: 20
+            });
+            const repositories = reposResponse.data;
+
+            // Create webview panel for organization
+            const panel = vscode.window.createWebviewPanel(
+                'githubOrganization',
+                `Organization - ${orgData.name || orgData.login}`,
+                vscode.ViewColumn.One,
+                {
+                    enableScripts: true
+                }
+            );
+
+            // Generate HTML content for organization profile
+            panel.webview.html = getOrganizationWebviewContent(panel.webview, orgData, repositories);
+
+            // Handle messages from the webview
+            panel.webview.onDidReceiveMessage(
+                async message => {
+                    switch (message.command) {
+                        case 'openRepo':
+                            try {
+                                const repoUrl = message.repoUrl;
+                                const repoName = message.repoName;
+                                const urlMatch = repoUrl.match(/github\.com[\/:]([^\/]+)\/([^\/\.]+)/);
+                                if (urlMatch) {
+                                    const [, owner, repo] = urlMatch;
+                                    await vscode.commands.executeCommand('github-activity-dashboard.expandProfileRepo', owner, repo);
+                                }
+                            } catch (error: any) {
+                                vscode.window.showErrorMessage(`Failed to open repository: ${error.message}`);
+                            }
+                            break;
+                        case 'openOrgProfile':
+                            try {
+                                await vscode.commands.executeCommand('github-activity-dashboard.openUserProfile', message.username);
+                            } catch (error: any) {
+                                vscode.window.showErrorMessage(`Failed to open profile: ${error.message}`);
+                            }
+                            break;
+                    }
+                },
+                undefined,
+                context.subscriptions
+            );
+
+        } catch (error: any) {
+            vscode.window.showErrorMessage(`Failed to load organization: ${error.message}`);
+        }
+    });
+
+    vscode.commands.registerCommand('github-activity-dashboard.openEventDetails', async (eventUrl: string) => {
+        try {
+            // Extract repo information from event URL
+            const urlMatch = eventUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+            if (!urlMatch) {
+                vscode.window.showErrorMessage('Invalid event URL format');
+                return;
+            }
+
+            const [, owner, repo] = urlMatch;
+
+            // Open the repository in VS Code
             await vscode.commands.executeCommand('github-activity-dashboard.expandProfileRepo', owner, repo);
+
+        } catch (error: any) {
+            vscode.window.showErrorMessage(`Failed to open event: ${error.message}`);
+        }
+    });
+
+    vscode.commands.registerCommand('github-activity-dashboard.openUserProfile', async (username: string) => {
+        try {
+            const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
+            const octokit = new Octokit({ auth: session.accessToken });
+
+            // Get user details
+            const userResponse = await octokit.users.getByUsername({ username });
+            const userData = userResponse.data;
+
+            // Get user's repositories
+            const reposResponse = await octokit.repos.listForUser({
+                username,
+                sort: 'updated',
+                per_page: 20
+            });
+            const repositories = reposResponse.data;
+
+            // Create webview panel for user profile
+            const panel = vscode.window.createWebviewPanel(
+                'githubUserProfile',
+                `Profile - ${userData.name || userData.login}`,
+                vscode.ViewColumn.One,
+                {
+                    enableScripts: true
+                }
+            );
+
+            // Generate HTML content for user profile
+            panel.webview.html = getUserProfileWebviewContent(panel.webview, userData, repositories);
+
+            // Handle messages from the webview
+            panel.webview.onDidReceiveMessage(
+                async message => {
+                    switch (message.command) {
+                        case 'openRepo':
+                            try {
+                                const repoUrl = message.repoUrl;
+                                const repoName = message.repoName;
+                                const urlMatch = repoUrl.match(/github\.com[\/:]([^\/]+)\/([^\/\.]+)/);
+                                if (urlMatch) {
+                                    const [, owner, repo] = urlMatch;
+                                    await vscode.commands.executeCommand('github-activity-dashboard.expandProfileRepo', owner, repo);
+                                }
+                            } catch (error: any) {
+                                vscode.window.showErrorMessage(`Failed to open repository: ${error.message}`);
+                            }
+                            break;
+                        case 'openProfile':
+                            try {
+                                await vscode.commands.executeCommand('github-activity-dashboard.openUserProfile', message.username);
+                            } catch (error: any) {
+                                vscode.window.showErrorMessage(`Failed to open profile: ${error.message}`);
+                            }
+                            break;
+                    }
+                },
+                undefined,
+                context.subscriptions
+            );
+
+        } catch (error: any) {
+            vscode.window.showErrorMessage(`Failed to load user profile: ${error.message}`);
         }
     });
 
@@ -2306,17 +2492,25 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
 
                 <!-- Footer -->
                 <div class="profile-footer">
-                    <a href="${userData.html_url}" target="_blank" class="github-link">
+                    <a href="#" class="github-link" onclick="openProfile('${userData.login}')">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                             <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
                                         </svg>
-                                        View on GitHub
+                        View Profile in VS Code
                                     </a>
                                 </div>
                             </div>
 
             <script nonce="${nonce}">
                 const vscode = acquireVsCodeApi();
+                
+                function openRepository(repoUrl, repoName) {
+                    vscode.postMessage({
+                        command: 'openRepo',
+                        repoUrl: repoUrl,
+                        repoName: repoName
+                    });
+                }
                 
                 function openOrganization(orgName) {
                     vscode.postMessage({
@@ -2329,6 +2523,13 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     vscode.postMessage({
                         command: 'openEvent',
                         eventUrl: eventUrl
+                    });
+                }
+
+                function openProfile(username) {
+                    vscode.postMessage({
+                        command: 'openProfile',
+                        username: username
                     });
                 }
             </script>
@@ -2463,3 +2664,599 @@ function marked(text: string): string {
 }
 
 export function deactivate() {}
+
+function getOrganizationWebviewContent(webview: vscode.Webview, orgData: any, repositories: any[] = []): string {
+    const nonce = getNonce();
+    return `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
+            <title>Organization Profile</title>
+            <style>
+                * {
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+                    background-color: #0d1117;
+                    color: #e6edf3;
+                    line-height: 1.5;
+                    overflow-x: hidden;
+                }
+                .container {
+                    max-width: 1280px;
+                    margin: 0 auto;
+                    padding: 24px;
+                }
+
+                .org-header {
+                    display: flex;
+                    gap: 24px;
+                    margin-bottom: 32px;
+                    padding: 0;
+                }
+                .org-avatar {
+                    width: 200px;
+                    height: 200px;
+                    border-radius: 6px;
+                    border: 1px solid #30363d;
+                }
+                .org-info {
+                    flex: 1;
+                    padding-top: 16px;
+                }
+                .org-name {
+                    font-size: 32px;
+                    font-weight: 600;
+                    color: #f0f6fc;
+                    margin-bottom: 8px;
+                }
+                .org-login {
+                    font-size: 20px;
+                    font-weight: 300;
+                    color: #7d8590;
+                    margin-bottom: 16px;
+                }
+                .org-description {
+                    font-size: 16px;
+                    margin-bottom: 16px;
+                    color: #e6edf3;
+                }
+
+                .org-stats {
+                    display: flex;
+                    gap: 16px;
+                    margin-bottom: 16px;
+                }
+                .stat-item {
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                    font-size: 14px;
+                    color: #7d8590;
+                }
+                .stat-number {
+                    font-weight: 600;
+                    color: #f0f6fc;
+                }
+
+                .repos-section {
+                    margin-top: 32px;
+                }
+                .repos-header {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    margin-bottom: 16px;
+                    padding-bottom: 8px;
+                    border-bottom: 1px solid #21262d;
+                }
+                .repos-title {
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: #f0f6fc;
+                }
+                .repos-count {
+                    background-color: #21262d;
+                    color: #e6edf3;
+                    font-size: 12px;
+                    font-weight: 500;
+                    padding: 0 6px;
+                    border-radius: 2em;
+                    line-height: 18px;
+                }
+
+                .repos-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+                    gap: 16px;
+                }
+                .repo-card {
+                    border: 1px solid #21262d;
+                    border-radius: 6px;
+                    padding: 16px;
+                    background-color: #0d1117;
+                    transition: border-color 0.2s;
+                    cursor: pointer;
+                }
+                .repo-card:hover {
+                    border-color: #30363d;
+                }
+                .repo-header {
+                    display: flex;
+                    align-items: flex-start;
+                    justify-content: space-between;
+                    margin-bottom: 8px;
+                }
+                .repo-name {
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: #2f81f7;
+                    text-decoration: none;
+                    margin: 0;
+                    line-height: 1.25;
+                }
+                .repo-visibility {
+                    font-size: 12px;
+                    font-weight: 500;
+                    padding: 0 7px;
+                    border-radius: 2em;
+                    border: 1px solid #21262d;
+                    color: #7d8590;
+                    line-height: 18px;
+                    margin-left: 8px;
+                }
+                .repo-description {
+                    font-size: 12px;
+                    color: #7d8590;
+                    margin-bottom: 8px;
+                    line-height: 1.33;
+                    display: -webkit-box;
+                    -webkit-line-clamp: 2;
+                    -webkit-box-orient: vertical;
+                    overflow: hidden;
+                }
+                .repo-footer {
+                    display: flex;
+                    align-items: center;
+                    gap: 16px;
+                    font-size: 12px;
+                    color: #7d8590;
+                }
+                .repo-meta {
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                }
+
+                .org-footer {
+                    margin-top: 32px;
+                    text-align: center;
+                }
+                .github-link {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 8px;
+                    color: #2f81f7;
+                    text-decoration: none;
+                    font-size: 14px;
+                    padding: 8px 16px;
+                    border: 1px solid #30363d;
+                    border-radius: 6px;
+                    transition: all 0.2s;
+                }
+                .github-link:hover {
+                    background-color: #21262d;
+                    border-color: #30363d;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="org-header">
+                    <div>
+                        <img src="${orgData.avatar_url}" alt="${orgData.login}" class="org-avatar">
+                    </div>
+                    <div class="org-info">
+                        <h1 class="org-name">${orgData.name || orgData.login}</h1>
+                        <h2 class="org-login">${orgData.login}</h2>
+                        ${orgData.description ? `<p class="org-description">${orgData.description}</p>` : ''}
+
+                        <div class="org-stats">
+                            <div class="stat-item">
+                                <span class="stat-number">${orgData.public_repos}</span> repositories
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-number">${orgData.followers}</span> followers
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-number">${orgData.following}</span> following
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="repos-section">
+                    <div class="repos-header">
+                        <h2 class="repos-title">Repositories</h2>
+                        <span class="repos-count">${repositories.length}</span>
+                    </div>
+
+                    <div class="repos-grid">
+                        ${repositories.map(repo => `
+                            <div class="repo-card" onclick="openRepository('${repo.clone_url}', '${repo.name}')">
+                                <div class="repo-header">
+                                    <div style="display: flex; align-items: center;">
+                                        <h3 class="repo-name">${repo.name}</h3>
+                                        <span class="repo-visibility ${repo.private ? 'private' : 'public'}">
+                                            ${repo.private ? 'Private' : 'Public'}
+                                        </span>
+                                    </div>
+                                </div>
+                                ${repo.description ? `<p class="repo-description">${repo.description}</p>` : ''}
+                                <div class="repo-footer">
+                                    ${repo.language ? `
+                                        <div class="repo-meta">
+                                            <span class="repo-language-color" style="background-color: ${getLanguageColor(repo.language)}"></span>
+                                            ${repo.language}
+                                        </div>
+                                    ` : ''}
+                                    <div class="repo-meta">
+                                        ⭐ ${repo.stargazers_count}
+                                    </div>
+                                    <div class="repo-meta">
+                                        🍴 ${repo.forks_count}
+                                    </div>
+                                    <span>Updated ${(() => {
+                                        const date = new Date(repo.updated_at);
+                                        const now = new Date();
+                                        const diff = now.getTime() - date.getTime();
+                                        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+                                        if (days === 0) return 'today';
+                                        if (days === 1) return 'yesterday';
+                                        if (days < 30) return days + ' days ago';
+                                        if (days < 365) return Math.floor(days / 30) + ' months ago';
+                                        return Math.floor(days / 365) + ' years ago';
+                                    })()}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <div class="org-footer">
+                    <a href="#" class="github-link" onclick="openProfile('${orgData.login}')">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+                        </svg>
+                        View Profile in VS Code
+                    </a>
+                </div>
+            </div>
+
+            <script nonce="${nonce}">
+                const vscode = acquireVsCodeApi();
+
+                function openRepository(repoUrl, repoName) {
+                    vscode.postMessage({
+                        command: 'openRepo',
+                        repoUrl: repoUrl,
+                        repoName: repoName
+                    });
+                }
+
+                function openProfile(username) {
+                    vscode.postMessage({
+                        command: 'openProfile',
+                        username: username
+                    });
+                }
+            </script>
+        </body>
+        </html>
+    `;
+}
+
+function getUserProfileWebviewContent(webview: vscode.Webview, userData: any, repositories: any[] = []): string {
+    const nonce = getNonce();
+    return `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
+            <title>User Profile</title>
+            <style>
+                * {
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+                    background-color: #0d1117;
+                    color: #e6edf3;
+                    line-height: 1.5;
+                    overflow-x: hidden;
+                }
+                .container {
+                    max-width: 1280px;
+                    margin: 0 auto;
+                    padding: 24px;
+                }
+
+                .user-header {
+                    display: flex;
+                    gap: 24px;
+                    margin-bottom: 32px;
+                    padding: 0;
+                }
+                .user-avatar {
+                    width: 200px;
+                    height: 200px;
+                    border-radius: 50%;
+                    border: 1px solid #30363d;
+                }
+                .user-info {
+                    flex: 1;
+                    padding-top: 16px;
+                }
+                .user-name {
+                    font-size: 32px;
+                    font-weight: 600;
+                    color: #f0f6fc;
+                    margin-bottom: 8px;
+                }
+                .user-login {
+                    font-size: 20px;
+                    font-weight: 300;
+                    color: #7d8590;
+                    margin-bottom: 16px;
+                }
+                .user-bio {
+                    font-size: 16px;
+                    margin-bottom: 16px;
+                    color: #e6edf3;
+                }
+
+                .user-stats {
+                    display: flex;
+                    gap: 16px;
+                    margin-bottom: 16px;
+                }
+                .stat-item {
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                    font-size: 14px;
+                    color: #7d8590;
+                }
+                .stat-number {
+                    font-weight: 600;
+                    color: #f0f6fc;
+                }
+
+                .repos-section {
+                    margin-top: 32px;
+                }
+                .repos-header {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    margin-bottom: 16px;
+                    padding-bottom: 8px;
+                    border-bottom: 1px solid #21262d;
+                }
+                .repos-title {
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: #f0f6fc;
+                }
+                .repos-count {
+                    background-color: #21262d;
+                    color: #e6edf3;
+                    font-size: 12px;
+                    font-weight: 500;
+                    padding: 0 6px;
+                    border-radius: 2em;
+                    line-height: 18px;
+                }
+
+                .repos-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+                    gap: 16px;
+                }
+                .repo-card {
+                    border: 1px solid #21262d;
+                    border-radius: 6px;
+                    padding: 16px;
+                    background-color: #0d1117;
+                    transition: border-color 0.2s;
+                    cursor: pointer;
+                }
+                .repo-card:hover {
+                    border-color: #30363d;
+                }
+                .repo-header {
+                    display: flex;
+                    align-items: flex-start;
+                    justify-content: space-between;
+                    margin-bottom: 8px;
+                }
+                .repo-name {
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: #2f81f7;
+                    text-decoration: none;
+                    margin: 0;
+                    line-height: 1.25;
+                }
+                .repo-visibility {
+                    font-size: 12px;
+                    font-weight: 500;
+                    padding: 0 7px;
+                    border-radius: 2em;
+                    border: 1px solid #21262d;
+                    color: #7d8590;
+                    line-height: 18px;
+                    margin-left: 8px;
+                }
+                .repo-description {
+                    font-size: 12px;
+                    color: #7d8590;
+                    margin-bottom: 8px;
+                    line-height: 1.33;
+                    display: -webkit-box;
+                    -webkit-line-clamp: 2;
+                    -webkit-box-orient: vertical;
+                    overflow: hidden;
+                }
+                .repo-footer {
+                    display: flex;
+                    align-items: center;
+                    gap: 16px;
+                    font-size: 12px;
+                    color: #7d8590;
+                }
+                .repo-meta {
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                }
+
+                .user-footer {
+                    margin-top: 32px;
+                    text-align: center;
+                }
+                .github-link {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 8px;
+                    color: #2f81f7;
+                    text-decoration: none;
+                    font-size: 14px;
+                    padding: 8px 16px;
+                    border: 1px solid #30363d;
+                    border-radius: 6px;
+                    transition: all 0.2s;
+                }
+                .github-link:hover {
+                    background-color: #21262d;
+                    border-color: #30363d;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="user-header">
+                    <div>
+                        <img src="${userData.avatar_url}" alt="${userData.login}" class="user-avatar">
+                    </div>
+                    <div class="user-info">
+                        <h1 class="user-name">${userData.name || userData.login}</h1>
+                        <h2 class="user-login">${userData.login}</h2>
+                        ${userData.bio ? `<p class="user-bio">${userData.bio}</p>` : ''}
+
+                        <div class="user-stats">
+                            <div class="stat-item">
+                                <span class="stat-number">${userData.public_repos}</span> repositories
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-number">${userData.followers}</span> followers
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-number">${userData.following}</span> following
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="repos-section">
+                    <div class="repos-header">
+                        <h2 class="repos-title">Repositories</h2>
+                        <span class="repos-count">${repositories.length}</span>
+                    </div>
+
+                    <div class="repos-grid">
+                        ${repositories.map(repo => `
+                            <div class="repo-card" onclick="openRepository('${repo.clone_url}', '${repo.name}')">
+                                <div class="repo-header">
+                                    <div style="display: flex; align-items: center;">
+                                        <h3 class="repo-name">${repo.name}</h3>
+                                        <span class="repo-visibility ${repo.private ? 'private' : 'public'}">
+                                            ${repo.private ? 'Private' : 'Public'}
+                                        </span>
+                                    </div>
+                                </div>
+                                ${repo.description ? `<p class="repo-description">${repo.description}</p>` : ''}
+                                <div class="repo-footer">
+                                    ${repo.language ? `
+                                        <div class="repo-meta">
+                                            <span class="repo-language-color" style="background-color: ${getLanguageColor(repo.language)}"></span>
+                                            ${repo.language}
+                                        </div>
+                                    ` : ''}
+                                    <div class="repo-meta">
+                                        ⭐ ${repo.stargazers_count}
+                                    </div>
+                                    <div class="repo-meta">
+                                        🍴 ${repo.forks_count}
+                                    </div>
+                                    <span>Updated ${(() => {
+                                        const date = new Date(repo.updated_at);
+                                        const now = new Date();
+                                        const diff = now.getTime() - date.getTime();
+                                        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+                                        if (days === 0) return 'today';
+                                        if (days === 1) return 'yesterday';
+                                        if (days < 30) return days + ' days ago';
+                                        if (days < 365) return Math.floor(days / 30) + ' months ago';
+                                        return Math.floor(days / 365) + ' years ago';
+                                    })()}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <div class="user-footer">
+                    <a href="#" class="github-link" onclick="openProfile('${userData.login}')">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+                        </svg>
+                        View Profile in VS Code
+                    </a>
+                </div>
+            </div>
+
+            <script nonce="${nonce}">
+                const vscode = acquireVsCodeApi();
+
+                function openRepository(repoUrl, repoName) {
+                    vscode.postMessage({
+                        command: 'openRepo',
+                        repoUrl: repoUrl,
+                        repoName: repoName
+                    });
+                }
+
+                function openProfile(username) {
+                    vscode.postMessage({
+                        command: 'openProfile',
+                        username: username
+                    });
+                }
+            </script>
+        </body>
+        </html>
+    `;
+}

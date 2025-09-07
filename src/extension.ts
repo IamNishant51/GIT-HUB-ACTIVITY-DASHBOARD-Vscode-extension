@@ -561,18 +561,17 @@ export function activate(context: vscode.ExtensionContext) {
             const repositories = reposResponse.data;
 
             // Create and show the webview panel
-            const panel = vscode.window.createWebviewPanel(
+        const panel = vscode.window.createWebviewPanel(
                 'githubProfile',
                 `GitHub Profile - ${userData.login}`,
                 vscode.ViewColumn.One,
                 {
-                    enableScripts: true,
-                    retainContextWhenHidden: true
+            enableScripts: true
                 }
             );
 
             // Generate the HTML content for the profile
-            panel.webview.html = getProfileWebviewContent(userData, repositories);
+            panel.webview.html = getProfileWebviewContent(panel.webview, userData, repositories);
 
             // Handle messages from the webview
             panel.webview.onDidReceiveMessage(
@@ -759,13 +758,15 @@ export function activate(context: vscode.ExtensionContext) {
     });
 }
 
-function getProfileWebviewContent(userData: any, repositories: any[] = []): string {
+function getProfileWebviewContent(webview: vscode.Webview, userData: any, repositories: any[] = []): string {
+    const nonce = getNonce();
     return `
         <!DOCTYPE html>
         <html lang="en">
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
             <title>GitHub Profile</title>
             <style>
                 * {
@@ -1182,7 +1183,7 @@ function getProfileWebviewContent(userData: any, repositories: any[] = []): stri
                                 </div>
                             </div>
 
-            <script>
+            <script nonce="${nonce}">
                 const vscode = acquireVsCodeApi();
                 
                 function openRepository(repoUrl, repoName) {
@@ -1232,6 +1233,16 @@ function getLanguageId(extension: string): string {
         'txt': 'plaintext'
     };
     return languageMap[extension.toLowerCase()] || 'plaintext';
+}
+
+// Generate a nonce for Content Security Policy
+function getNonce(): string {
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let text = '';
+    for (let i = 0; i < 32; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
 }
 
 export function deactivate() {}

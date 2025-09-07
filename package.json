@@ -1,10 +1,15 @@
   {
-  "name": "github-activity-dashboard",
-  "displayName": "GitHub Activity Dashboard",
+  "name": "github-dashboard",
+  "displayName": "GitHub Dashboard",
   "description": "A dashboard to track your GitHub activity.",
   "version": "0.0.1",
+  "publisher": "NishantUnavane",
   "engines": {
     "vscode": "^1.80.0"
+  },
+  "galleryBanner": {
+    "color": "#0d1117",
+    "theme": "dark"
   },
   "categories": [
     "Other"
@@ -73,12 +78,7 @@
         "command": "github-activity-dashboard.searchRepos",
         "title": "Search GitHub Repositories",
         "icon": "$(search)"
-      },
-      {
-        "command": "github-activity-dashboard.unstarRepo",
-        "title": "Unstar Repository",
-        "icon": "$(star-empty)"
-      }
+  }
     ]
   },
   "scripts": {
@@ -88,6 +88,15 @@
     "package": "webpack --mode production --devtool hidden-source-map",
     "lint": "eslint src --ext ts"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/IamNishant51/github-activity-dashboard.git"
+  },
+  "bugs": {
+    "url": "https://github.com/IamNishant51/github-activity-dashboard/issues"
+  },
+  "homepage": "https://github.com/IamNishant51/github-activity-dashboard",
+  "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.3.1",
     "@types/vscode": "^1.80.0",

@@ -13,13 +13,9 @@ class GitHubActivityProvider implements vscode.TreeDataProvider<vscode.TreeItem>
     }
 
     private async initializeOctokit() {
-        try {
-            const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
-            this.octokit = new Octokit({ auth: session.accessToken });
-            // Don't auto-refresh here to avoid race conditions
-        } catch (error) {
-            console.error('Failed to initialize GitHub authentication:', error);
-        }
+        const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
+        this.octokit = new Octokit({ auth: session.accessToken });
+        this.refresh();
     }
 
     refresh(): void {
@@ -36,56 +32,45 @@ class GitHubActivityProvider implements vscode.TreeDataProvider<vscode.TreeItem>
         }
 
         if (element) {
+            // This is a leaf node
             return [];
         } else {
-            try {
-                const username = await this.octokit.users.getAuthenticated().then(res => res.data.login);
+            // This is the root
+            const username = await this.octokit.users.getAuthenticated().then(res => res.data.login);
 
-                // Fetch data in parallel with limits for faster loading
-                const [assignedIssues, reviewRequests] = await Promise.all([
-                    this.octokit.search.issuesAndPullRequests({ 
-                        q: `is:open is:issue assignee:${username}`,
-                        per_page: 10, // Reduced for faster loading
-                        sort: 'updated'
-                    }),
-                    this.octokit.search.issuesAndPullRequests({ 
-                        q: `is:open is:pr review-requested:${username}`,
-                        per_page: 10, // Reduced for faster loading  
-                        sort: 'updated'
-                    })
-                ]);
+            const [assignedIssues, reviewRequests] = await Promise.all([
+                this.octokit.search.issuesAndPullRequests({ q: `is:open is:issue assignee:${username}` }),
+                this.octokit.search.issuesAndPullRequests({ q: `is:open is:pr review-requested:${username}` })
+            ]);
 
-                const assignedIssuesItems = assignedIssues.data.items.map(issue => {
-                    const item = new vscode.TreeItem(`🐛 ${issue.title}`, vscode.TreeItemCollapsibleState.None);
-                    item.command = {
-                        command: 'vscode.open',
-                        title: 'Open Issue',
-                        arguments: [vscode.Uri.parse(issue.html_url)]
-                    };
-                    item.tooltip = `#${issue.number} - ${issue.repository_url.split('/').slice(-1)[0]}`;
-                    return item;
-                });
+            const assignedIssuesItems = assignedIssues.data.items.map(issue => {
+                const item = new vscode.TreeItem(issue.title, vscode.TreeItemCollapsibleState.None);
+                item.command = {
+                    command: 'vscode.open',
+                    title: 'Open Issue',
+                    arguments: [vscode.Uri.parse(issue.html_url)]
+                };
+                item.tooltip = `#${issue.number}`;
+                return item;
+            });
 
-                const reviewRequestsItems = reviewRequests.data.items.map(pr => {
-                    const item = new vscode.TreeItem(`🔍 ${pr.title}`, vscode.TreeItemCollapsibleState.None);
-                    item.command = {
-                        command: 'vscode.open',
-                        title: 'Open Pull Request',
-                        arguments: [vscode.Uri.parse(pr.html_url)]
-                    };
-                    item.tooltip = `#${pr.number} - ${pr.repository_url.split('/').slice(-1)[0]}`;
-                    return item;
-                });
+            const reviewRequestsItems = reviewRequests.data.items.map(pr => {
+                const item = new vscode.TreeItem(pr.title, vscode.TreeItemCollapsibleState.None);
+                item.command = {
+                    command: 'vscode.open',
+                    title: 'Open Pull Request',
+                    arguments: [vscode.Uri.parse(pr.html_url)]
+                };
+                item.tooltip = `#${pr.number}`;
+                return item;
+            });
 
-                return [
-                    new vscode.TreeItem(`📋 Assigned Issues (${assignedIssuesItems.length})`, vscode.TreeItemCollapsibleState.Expanded),
-                    ...assignedIssuesItems,
-                    new vscode.TreeItem(`👀 Review Requests (${reviewRequestsItems.length})`, vscode.TreeItemCollapsibleState.Expanded),
-                    ...reviewRequestsItems
-                ];
-            } catch (error) {
-                return [new vscode.TreeItem('❌ Error loading GitHub data', vscode.TreeItemCollapsibleState.None)];
-            }
+            return [
+                new vscode.TreeItem(`Assigned Issues (${assignedIssuesItems.length})`, vscode.TreeItemCollapsibleState.Expanded),
+                ...assignedIssuesItems,
+                new vscode.TreeItem(`Review Requests (${reviewRequestsItems.length})`, vscode.TreeItemCollapsibleState.Expanded),
+                ...reviewRequestsItems
+            ];
         }
     }
 }
@@ -131,8 +116,9 @@ class GitHubRepoProvider implements vscode.TreeDataProvider<RepoTreeItem> {
         try {
             const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
             this.octokit = new Octokit({ auth: session.accessToken });
+            this.refresh();
         } catch (error) {
-            console.error('Could not authenticate with GitHub:', error);
+            vscode.window.showErrorMessage('Could not authenticate with GitHub.');
         }
     }
 
@@ -328,8 +314,9 @@ class GitHubStarsProvider implements vscode.TreeDataProvider<StarredRepoTreeItem
         try {
             const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
             this.octokit = new Octokit({ auth: session.accessToken });
+            this.refresh();
         } catch (error) {
-            console.error('Could not authenticate with GitHub:', error);
+            vscode.window.showErrorMessage('Could not authenticate with GitHub.');
         }
     }
 
@@ -550,11 +537,6 @@ export function activate(context: vscode.ExtensionContext) {
     const githubProfileProvider = new GitHubProfileProvider();
     vscode.window.registerTreeDataProvider('github-profile', githubProfileProvider);
 
-    // Auto-open profile after providers are registered and initialized
-    setTimeout(() => {
-        vscode.commands.executeCommand('github-activity-dashboard.openProfile');
-    }, 1500); // Increased delay to ensure providers are ready
-
     vscode.commands.registerCommand('github-activity-dashboard.refresh', () => {
         githubActivityProvider.refresh();
         githubRepoProvider.refresh();
@@ -565,107 +547,66 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     vscode.commands.registerCommand('github-activity-dashboard.openProfile', async () => {
-        // Show loading notification
-        const loadingNotification = vscode.window.withProgress({
-            location: vscode.ProgressLocation.Notification,
-            title: "Loading GitHub Profile...",
-            cancellable: false
-        }, async (progress) => {
-            try {
-                progress.report({ message: "Authenticating..." });
-                const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
-                const octokit = new Octokit({ auth: session.accessToken });
+        try {
+            const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
+            const octokit = new Octokit({ auth: session.accessToken });
+            const user = await octokit.users.getAuthenticated();
+            const userData = user.data;
 
-                progress.report({ message: "Fetching profile..." });
-                
-                // Fetch user data and repositories in parallel for better performance
-                const [userResponse, reposResponse] = await Promise.all([
-                    octokit.users.getAuthenticated(),
-                    octokit.repos.listForAuthenticatedUser({
-                        sort: 'updated',
-                        per_page: 20, // Reduced from 50 to load faster
-                        type: 'all'
-                    })
-                ]);
+            // Fetch user's repositories
+            const reposResponse = await octokit.repos.listForAuthenticatedUser({
+                sort: 'updated',
+                per_page: 50
+            });
+            const repositories = reposResponse.data;
 
-                const userData = userResponse.data;
-                const repositories = reposResponse.data;
+            // Create and show the webview panel
+        const panel = vscode.window.createWebviewPanel(
+                'githubProfile',
+                `GitHub Profile - ${userData.login}`,
+                vscode.ViewColumn.One,
+                {
+            enableScripts: true
+                }
+            );
 
-                progress.report({ message: "Creating interface..." });
+            // Generate the HTML content for the profile
+            panel.webview.html = getProfileWebviewContent(panel.webview, userData, repositories);
 
-                // Create and show the webview panel immediately with loading state
-                const panel = vscode.window.createWebviewPanel(
-                    'githubProfile',
-                    `GitHub Profile - ${userData.login}`,
-                    vscode.ViewColumn.One,
-                    {
-                        enableScripts: true,
-                        retainContextWhenHidden: true
+            // Handle messages from the webview
+            panel.webview.onDidReceiveMessage(
+                async message => {
+                    switch (message.command) {
+                        case 'openRepo':
+                            try {
+                                const repoUrl = message.repoUrl;
+                                const repoName = message.repoName;
+                                
+                                // Show progress while cloning
+                                vscode.window.withProgress({
+                                    location: vscode.ProgressLocation.Notification,
+                                    title: `Opening ${repoName}...`,
+                                    cancellable: false
+                                }, async (progress) => {
+                                    progress.report({ message: 'Setting up workspace' });
+                                    
+                                    // Open the repository in a new window
+                                    const uri = vscode.Uri.parse(repoUrl);
+                                    await vscode.commands.executeCommand('git.clone', uri);
+                                });
+                            } catch (error: any) {
+                                vscode.window.showErrorMessage(`Failed to open repository: ${error.message}`);
+                            }
+                            break;
                     }
-                );
+                },
+                undefined,
+                context.subscriptions
+            );
 
-                // Show loading state immediately for better UX
-                panel.webview.html = getLoadingWebviewContent(`${userData.login}'s Profile`);
-
-                // Generate the HTML content for the profile
-                panel.webview.html = getProfileWebviewContent(userData, repositories);
-
-                // Handle messages from the webview
-                panel.webview.onDidReceiveMessage(
-                    async message => {
-                        switch (message.command) {
-                            case 'openRepo':
-                                try {
-                                    const repoOwner = message.repoOwner;
-                                    const repoName = message.repoName;
-                                    
-                                    // Create a new webview for repository browsing
-                                    const repoPanel = vscode.window.createWebviewPanel(
-                                        'githubRepo',
-                                        `${repoOwner}/${repoName}`,
-                                        vscode.ViewColumn.One,
-                                        {
-                                            enableScripts: true,
-                                            retainContextWhenHidden: true
-                                        }
-                                    );
-
-                                    // Show loading state immediately
-                                    repoPanel.webview.html = getLoadingWebviewContent(`${repoOwner}/${repoName}`);
-
-                                    // Fetch repository content
-                                    const [repoData, contents] = await Promise.all([
-                                        octokit.repos.get({
-                                            owner: repoOwner,
-                                            repo: repoName
-                                        }),
-                                        octokit.repos.getContent({
-                                            owner: repoOwner,
-                                            repo: repoName,
-                                            path: ''
-                                        })
-                                    ]);
-
-                                    repoPanel.webview.html = getRepoWebviewContent(repoData.data, contents.data as any[], repoOwner, repoName);
-                                    
-                                } catch (error: any) {
-                                    vscode.window.showErrorMessage(`Failed to open repository: ${error.message}`);
-                                }
-                                break;
-                        }
-                    },
-                    undefined,
-                    context.subscriptions
-                );
-
-                progress.report({ message: "Complete!" });
-
-            } catch (err: any) {
-                vscode.window.showErrorMessage(`Failed to load profile: ${err.message}`);
-            }
-        });
-
-        return loadingNotification;
+        } catch (err: any) {
+            vscode.window.showErrorMessage(`Failed to load profile: ${err.message}`);
+        }
     });
 
     vscode.commands.registerCommand('github-activity-dashboard.openStarredFile', async (item: StarredRepoTreeItem) => {
@@ -817,13 +758,15 @@ export function activate(context: vscode.ExtensionContext) {
     });
 }
 
-function getProfileWebviewContent(userData: any, repositories: any[] = []): string {
+function getProfileWebviewContent(webview: vscode.Webview, userData: any, repositories: any[] = []): string {
+    const nonce = getNonce();
     return `
         <!DOCTYPE html>
         <html lang="en">
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
             <title>GitHub Profile</title>
             <style>
                 * {
@@ -1182,7 +1125,7 @@ function getProfileWebviewContent(userData: any, repositories: any[] = []): stri
                     
                     <div class="repos-grid">
                         ${repositories.map(repo => `
-                            <div class="repo-card" onclick="openRepository('${repo.owner.login}', '${repo.name}')">>
+                            <div class="repo-card" onclick="openRepository('${repo.clone_url}', '${repo.name}')">
                                 <div class="repo-header">
                                     <div style="display: flex; align-items: center;">
                                         <h3 class="repo-name">${repo.name}</h3>
@@ -1240,215 +1183,15 @@ function getProfileWebviewContent(userData: any, repositories: any[] = []): stri
                                 </div>
                             </div>
 
-            <script>
+            <script nonce="${nonce}">
                 const vscode = acquireVsCodeApi();
                 
-                function openRepository(repoOwner, repoName) {
+                function openRepository(repoUrl, repoName) {
                     vscode.postMessage({
                         command: 'openRepo',
-                        repoOwner: repoOwner,
+                        repoUrl: repoUrl,
                         repoName: repoName
                     });
-                }
-            </script>
-        </body>
-        </html>
-    `;
-}
-
-function getLoadingWebviewContent(title: string): string {
-    return `
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>${title}</title>
-            <style>
-                * {
-                    margin: 0;
-                    padding: 0;
-                    box-sizing: border-box;
-                }
-                body {
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
-                    background-color: #0d1117;
-                    color: #e6edf3;
-                    line-height: 1.5;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    height: 100vh;
-                    flex-direction: column;
-                }
-                .loading-container {
-                    text-align: center;
-                }
-                .spinner {
-                    width: 40px;
-                    height: 40px;
-                    border: 3px solid #21262d;
-                    border-top: 3px solid #2f81f7;
-                    border-radius: 50%;
-                    animation: spin 1s linear infinite;
-                    margin: 0 auto 16px auto;
-                }
-                @keyframes spin {
-                    0% { transform: rotate(0deg); }
-                    100% { transform: rotate(360deg); }
-                }
-                .loading-text {
-                    font-size: 16px;
-                    color: #7d8590;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="loading-container">
-                <div class="spinner"></div>
-                <div class="loading-text">Loading ${title}...</div>
-            </div>
-        </body>
-        </html>
-    `;
-}
-
-function getRepoWebviewContent(repoData: any, contents: any[], owner: string, repoName: string): string {
-    return `
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>${owner}/${repoName}</title>
-            <style>
-                * {
-                    margin: 0;
-                    padding: 0;
-                    box-sizing: border-box;
-                }
-                body {
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
-                    background-color: #0d1117;
-                    color: #e6edf3;
-                    line-height: 1.5;
-                }
-                .container {
-                    max-width: 1280px;
-                    margin: 0 auto;
-                    padding: 24px;
-                }
-                .repo-header {
-                    border-bottom: 1px solid #21262d;
-                    padding-bottom: 16px;
-                    margin-bottom: 24px;
-                }
-                .repo-title {
-                    font-size: 20px;
-                    font-weight: 600;
-                    color: #2f81f7;
-                    margin-bottom: 8px;
-                }
-                .repo-description {
-                    color: #7d8590;
-                    margin-bottom: 16px;
-                }
-                .repo-stats {
-                    display: flex;
-                    gap: 16px;
-                    font-size: 14px;
-                    color: #7d8590;
-                }
-                .file-list {
-                    background-color: #161b22;
-                    border: 1px solid #30363d;
-                    border-radius: 6px;
-                    overflow: hidden;
-                }
-                .file-item {
-                    display: flex;
-                    align-items: center;
-                    padding: 8px 16px;
-                    border-bottom: 1px solid #21262d;
-                    cursor: pointer;
-                    transition: background-color 0.1s;
-                }
-                .file-item:hover {
-                    background-color: #21262d;
-                }
-                .file-item:last-child {
-                    border-bottom: none;
-                }
-                .file-icon {
-                    margin-right: 8px;
-                    width: 16px;
-                    height: 16px;
-                }
-                .file-name {
-                    color: #2f81f7;
-                    text-decoration: none;
-                    font-weight: 600;
-                }
-                .file-name:hover {
-                    text-decoration: underline;
-                }
-                .folder-name {
-                    color: #2f81f7;
-                    text-decoration: none;
-                    font-weight: 600;
-                }
-                .folder-name:hover {
-                    text-decoration: underline;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="repo-header">
-                    <h1 class="repo-title">${owner}/${repoName}</h1>
-                    ${repoData.description ? `<p class="repo-description">${repoData.description}</p>` : ''}
-                    <div class="repo-stats">
-                        <span>⭐ ${repoData.stargazers_count}</span>
-                        <span>🍴 ${repoData.forks_count}</span>
-                        <span>👁️ ${repoData.watchers_count}</span>
-                        ${repoData.language ? `<span>💻 ${repoData.language}</span>` : ''}
-                    </div>
-                </div>
-                
-                <div class="file-list">
-                    ${contents.map(item => `
-                        <div class="file-item">
-                            <div class="file-icon">
-                                ${item.type === 'dir' ? '📁' : '📄'}
-                            </div>
-                            <a href="#" class="${item.type === 'dir' ? 'folder-name' : 'file-name'}" 
-                               onclick="openFile('${item.path}', '${item.type}')">
-                                ${item.name}
-                            </a>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-            
-            <script>
-                const vscode = acquireVsCodeApi();
-                
-                function openFile(path, type) {
-                    if (type === 'file') {
-                        vscode.postMessage({
-                            command: 'openFile',
-                            owner: '${owner}',
-                            repo: '${repoName}',
-                            path: path
-                        });
-                    } else {
-                        vscode.postMessage({
-                            command: 'openFolder',
-                            owner: '${owner}',
-                            repo: '${repoName}',
-                            path: path
-                        });
-                    }
                 }
             </script>
         </body>
@@ -1490,6 +1233,16 @@ function getLanguageId(extension: string): string {
         'txt': 'plaintext'
     };
     return languageMap[extension.toLowerCase()] || 'plaintext';
+}
+
+// Generate a nonce for Content Security Policy
+function getNonce(): string {
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let text = '';
+    for (let i = 0; i < 32; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
 }
 
 export function deactivate() {}

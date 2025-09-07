@@ -2,7 +2,7 @@
   "name": "github-activity-dashboard",
   "displayName": "GitHub Activity Dashboard",
   "description": "A dashboard to track your GitHub activity.",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "icon": "logo.png",
   "publisher": "NishantUnavane",
   "engines": {

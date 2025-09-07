@@ -1,8 +1,8 @@
-  {
-  "name": "github-dashboard",
-  "displayName": "GitHub Dashboard",
+{
+  "name": "github-activity-dashboard",
+  "displayName": "GitHub Activity Dashboard",
   "description": "A dashboard to track your GitHub activity.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "NishantUnavane",
   "engines": {
     "vscode": "^1.80.0"
@@ -57,6 +57,11 @@
           "id": "github-profile",
           "name": "Profile",
           "icon": "resources/icon.svg"
+        },
+        {
+          "id": "github-profile-repos",
+          "name": "Profile Repositories",
+          "icon": "resources/icon.svg"
         }
       ]
     },
@@ -78,7 +83,57 @@
         "command": "github-activity-dashboard.searchRepos",
         "title": "Search GitHub Repositories",
         "icon": "$(search)"
-  }
+      },
+      {
+        "command": "github-activity-dashboard.openRepo",
+        "title": "Open Repository in VS Code",
+        "icon": "$(repo)"
+      },
+      {
+        "command": "github-activity-dashboard.openProfile",
+        "title": "Open Profile in VS Code",
+        "icon": "$(account)"
+      },
+      {
+        "command": "github-activity-dashboard.openStarredFile",
+        "title": "Open Starred File",
+        "icon": "$(file)"
+      },
+      {
+        "command": "github-activity-dashboard.checkoutCommit",
+        "title": "Checkout Commit",
+        "icon": "$(git-commit)"
+      },
+      {
+        "command": "github-activity-dashboard.openFile",
+        "title": "Open File",
+        "icon": "$(file)"
+      },
+      {
+        "command": "github-activity-dashboard.testExpandRepo",
+        "title": "Test Expand Repository (Debug)",
+        "icon": "$(debug)"
+      },
+      {
+        "command": "github-activity-dashboard.createBranch",
+        "title": "Create Branch",
+        "icon": "$(git-branch)"
+      },
+      {
+        "command": "github-activity-dashboard.switchBranch",
+        "title": "Switch Branch",
+        "icon": "$(git-branch)"
+      },
+      {
+        "command": "github-activity-dashboard.viewRepositoryStats",
+        "title": "View Repository Statistics",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "github-activity-dashboard.searchCode",
+        "title": "Search Code in Repository",
+        "icon": "$(search)"
+      }
     ]
   },
   "scripts": {

@@ -296,6 +296,11 @@ class StarredRepoTreeItem extends vscode.TreeItem {
         } else if (repoInfo?.type === 'repo') {
             this.iconPath = new vscode.ThemeIcon('repo');
             this.contextValue = 'starredRepo';
+            this.command = {
+                command: 'github-activity-dashboard.openRepo',
+                title: 'Open Repository in VS Code',
+                arguments: [repoInfo.owner, repoInfo.repo]
+            };
         }
     }
 }
@@ -391,6 +396,137 @@ class GitHubStarsProvider implements vscode.TreeDataProvider<StarredRepoTreeItem
     }
 }
 
+class ProfileRepoTreeItem extends vscode.TreeItem {
+    constructor(
+        public readonly label: string,
+        public readonly collapsibleState: vscode.TreeItemCollapsibleState,
+        public readonly repoInfo?: {
+            owner: string,
+            repo: string,
+            path?: string,
+            type: string,
+            sha?: string,
+            url?: string
+        }
+    ) {
+        super(label, collapsibleState);
+
+        if (repoInfo?.type === 'file') {
+            this.command = {
+                command: 'github-activity-dashboard.openProfileFile',
+                title: 'Open File',
+                arguments: [this]
+            };
+            this.iconPath = new vscode.ThemeIcon('file');
+        } else if (repoInfo?.type === 'dir') {
+            this.iconPath = new vscode.ThemeIcon('folder');
+        } else if (repoInfo?.type === 'repo') {
+            this.iconPath = new vscode.ThemeIcon('repo');
+            this.contextValue = 'profileRepo';
+        }
+    }
+}
+
+class GitHubProfileReposProvider implements vscode.TreeDataProvider<ProfileRepoTreeItem> {
+    private _onDidChangeTreeData: vscode.EventEmitter<ProfileRepoTreeItem | undefined | null | void> = new vscode.EventEmitter<ProfileRepoTreeItem | undefined | null | void>();
+    readonly onDidChangeTreeData: vscode.Event<ProfileRepoTreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
+
+    private octokit: Octokit | undefined;
+    private repositories: any[] = [];
+
+    constructor() {
+        this.initializeOctokit();
+    }
+
+    private async initializeOctokit() {
+        try {
+            const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
+            this.octokit = new Octokit({ auth: session.accessToken });
+            await this.loadRepositories();
+            this.refresh();
+        } catch (error) {
+            vscode.window.showErrorMessage('Could not authenticate with GitHub.');
+        }
+    }
+
+    private async loadRepositories() {
+        if (!this.octokit) return;
+        
+        try {
+            const reposResponse = await this.octokit.repos.listForAuthenticatedUser({
+                sort: 'updated',
+                per_page: 100
+            });
+            this.repositories = reposResponse.data;
+        } catch (error) {
+            console.error('Error loading repositories:', error);
+        }
+    }
+
+    refresh(): void {
+        this._onDidChangeTreeData.fire();
+    }
+
+    getTreeItem(element: ProfileRepoTreeItem): vscode.TreeItem {
+        return element;
+    }
+
+    async getChildren(element?: ProfileRepoTreeItem): Promise<ProfileRepoTreeItem[]> {
+        if (!this.octokit) {
+            return [];
+        }
+
+        if (element && element.repoInfo) {
+            // It's a repository or directory, fetch its content
+            const { owner, repo, path } = element.repoInfo;
+            if (element.repoInfo.type === 'repo' || element.repoInfo.type === 'dir') {
+                try {
+                    const contents = await this.octokit.repos.getContent({ 
+                        owner, 
+                        repo, 
+                        path: path || '' 
+                    });
+                    
+                    if (Array.isArray(contents.data)) {
+                        return contents.data.map(item => 
+                            new ProfileRepoTreeItem(
+                                item.name, 
+                                item.type === 'dir' ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None, 
+                                { 
+                                    owner, 
+                                    repo, 
+                                    path: item.path, 
+                                    type: item.type, 
+                                    sha: item.sha 
+                                }
+                            )
+                        );
+                    }
+                } catch (err: any) {
+                    return [new ProfileRepoTreeItem(`Error: ${err.message}`, vscode.TreeItemCollapsibleState.None)];
+                }
+            }
+            return [];
+        } else {
+            // It's the root, show user's repositories
+            return this.repositories.map(repo => {
+                const item = new ProfileRepoTreeItem(
+                    repo.name, 
+                    vscode.TreeItemCollapsibleState.Collapsed,
+                    {
+                        owner: repo.owner.login,
+                        repo: repo.name,
+                        type: 'repo',
+                        url: repo.html_url
+                    }
+                );
+                item.description = repo.private ? 'Private' : 'Public';
+                item.tooltip = `${repo.full_name}\n${repo.description || 'No description'}\n⭐ ${repo.stargazers_count} stars • 🍴 ${repo.forks_count} forks`;
+                return item;
+            });
+        }
+    }
+}
 class GitHubProfileProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<vscode.TreeItem | undefined | null | void> = new vscode.EventEmitter<vscode.TreeItem | undefined | null | void>();
     readonly onDidChangeTreeData: vscode.Event<vscode.TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
@@ -518,6 +654,102 @@ class GitHubNotificationsProvider implements vscode.TreeDataProvider<vscode.Tree
     }
 }
 
+class GitHubBranchesProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
+    private _onDidChangeTreeData: vscode.EventEmitter<vscode.TreeItem | undefined | null | void> = new vscode.EventEmitter<vscode.TreeItem | undefined | null | void>();
+    readonly onDidChangeTreeData: vscode.Event<vscode.TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
+
+    private octokit: Octokit | undefined;
+
+    constructor() {
+        this.initializeOctokit();
+    }
+
+    private async initializeOctokit() {
+        try {
+            const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
+            this.octokit = new Octokit({ auth: session.accessToken });
+            this.refresh();
+        } catch (error) {
+            vscode.window.showErrorMessage('Could not authenticate with GitHub.');
+        }
+    }
+
+    refresh(): void {
+        this._onDidChangeTreeData.fire();
+    }
+
+    getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
+        return element;
+    }
+
+    async getChildren(element?: vscode.TreeItem): Promise<vscode.TreeItem[]> {
+        if (!this.octokit) {
+            return [new vscode.TreeItem('Please authenticate with GitHub', vscode.TreeItemCollapsibleState.None)];
+        }
+
+        try {
+            const user = await this.octokit.users.getAuthenticated();
+            const username = user.data.login;
+
+            // Get user's repositories
+            const repos = await this.octokit.repos.listForAuthenticatedUser({ per_page: 10 });
+
+            const branchItems: vscode.TreeItem[] = [];
+
+            for (const repo of repos.data) {
+                try {
+                    const branches = await this.octokit.repos.listBranches({
+                        owner: repo.owner.login,
+                        repo: repo.name,
+                        per_page: 5
+                    });
+
+                    const repoItem = new vscode.TreeItem(repo.name, vscode.TreeItemCollapsibleState.Collapsed);
+                    repoItem.description = `${branches.data.length} branches`;
+                    repoItem.tooltip = `Repository: ${repo.full_name}\nBranches: ${branches.data.length}`;
+                    repoItem.iconPath = new vscode.ThemeIcon('repo');
+
+                    // Store repo info for expansion
+                    (repoItem as any).repoInfo = {
+                        owner: repo.owner.login,
+                        repo: repo.name,
+                        branches: branches.data
+                    };
+
+                    branchItems.push(repoItem);
+                } catch (error) {
+                    // Skip repos we can't access
+                }
+            }
+
+            if (branchItems.length === 0) {
+                return [new vscode.TreeItem('No repositories found', vscode.TreeItemCollapsibleState.None)];
+            }
+
+            return branchItems;
+        } catch (err: any) {
+            return [new vscode.TreeItem(`Error: ${err.message}`, vscode.TreeItemCollapsibleState.None)];
+        }
+    }
+
+    async getBranchChildren(repoInfo: any): Promise<vscode.TreeItem[]> {
+        return repoInfo.branches.map((branch: any) => {
+            const item = new vscode.TreeItem(branch.name, vscode.TreeItemCollapsibleState.None);
+            item.description = branch.protected ? 'Protected' : '';
+            item.tooltip = `Branch: ${branch.name}\nRepository: ${repoInfo.owner}/${repoInfo.repo}\nProtected: ${branch.protected}`;
+            item.iconPath = new vscode.ThemeIcon('git-branch');
+
+            item.command = {
+                command: 'github-activity-dashboard.switchBranch',
+                title: 'Switch to Branch',
+                arguments: [repoInfo.owner, repoInfo.repo, branch.name]
+            };
+
+            return item;
+        });
+    }
+}
+
 export function activate(context: vscode.ExtensionContext) {
     const githubActivityProvider = new GitHubActivityProvider();
     vscode.window.registerTreeDataProvider('github-activity-dashboard', githubActivityProvider);
@@ -537,6 +769,18 @@ export function activate(context: vscode.ExtensionContext) {
     const githubProfileProvider = new GitHubProfileProvider();
     vscode.window.registerTreeDataProvider('github-profile', githubProfileProvider);
 
+    const githubProfileReposProvider = new GitHubProfileReposProvider();
+    vscode.window.registerTreeDataProvider('github-profile-repos', githubProfileReposProvider);
+
+    // Create and store reference to the Profile Repositories tree view
+    const profileReposTreeView = vscode.window.createTreeView('github-profile-repos', {
+        treeDataProvider: githubProfileReposProvider,
+        showCollapseAll: true
+    });
+    context.subscriptions.push(profileReposTreeView);
+
+    console.log('Profile Repositories tree view created:', profileReposTreeView ? 'YES' : 'NO');
+
     vscode.commands.registerCommand('github-activity-dashboard.refresh', () => {
         githubActivityProvider.refresh();
         githubRepoProvider.refresh();
@@ -544,6 +788,7 @@ export function activate(context: vscode.ExtensionContext) {
         githubStarsProvider.refresh();
         githubNotificationsProvider.refresh();
         githubProfileProvider.refresh();
+        githubProfileReposProvider.refresh();
     });
 
     vscode.commands.registerCommand('github-activity-dashboard.openProfile', async () => {
@@ -560,6 +805,78 @@ export function activate(context: vscode.ExtensionContext) {
             });
             const repositories = reposResponse.data;
 
+            // Fetch user's organizations
+            const orgsResponse = await octokit.orgs.listForAuthenticatedUser();
+            const organizations = orgsResponse.data;
+
+            // Fetch user's pinned repositories (using GraphQL since REST API doesn't have this)
+            let pinnedRepos: any[] = [];
+            try {
+                const pinnedQuery = `
+                    query {
+                        user(login: "${userData.login}") {
+                            pinnedItems(first: 6, types: REPOSITORY) {
+                                nodes {
+                                    ... on Repository {
+                                        name
+                                        description
+                                        url
+                                        stargazers {
+                                            totalCount
+                                        }
+                                        forks {
+                                            totalCount
+                                        }
+                                        primaryLanguage {
+                                            name
+                                            color
+                                        }
+                                        isPrivate
+                                    }
+                                }
+                            }
+                        }
+                    }
+                `;
+                const graphqlResponse: any = await octokit.graphql(pinnedQuery);
+                pinnedRepos = graphqlResponse.user.pinnedItems.nodes;
+            } catch (error) {
+                console.log('Could not fetch pinned repos:', error);
+            }
+
+            // Fetch recent activity (events)
+            const eventsResponse = await octokit.activity.listEventsForAuthenticatedUser({
+                username: userData.login,
+                per_page: 20
+            });
+            const recentEvents = eventsResponse.data;
+
+            // Fetch user's profile README
+            let profileReadme = null;
+            try {
+                const readmeResponse = await octokit.repos.getContent({
+                    owner: userData.login,
+                    repo: userData.login,
+                    path: 'README.md'
+                });
+                if ('content' in readmeResponse.data) {
+                    profileReadme = Buffer.from(readmeResponse.data.content, 'base64').toString('utf8');
+                }
+            } catch (error) {
+                console.log('No profile README found');
+            }
+
+            // Calculate language statistics
+            const languageStats: { [key: string]: number } = {};
+            repositories.forEach(repo => {
+                if (repo.language) {
+                    languageStats[repo.language] = (languageStats[repo.language] || 0) + 1;
+                }
+            });
+            const topLanguages = Object.entries(languageStats)
+                .sort(([,a]: [string, number], [,b]: [string, number]) => b - a)
+                .slice(0, 8);
+
             // Create and show the webview panel
         const panel = vscode.window.createWebviewPanel(
                 'githubProfile',
@@ -571,31 +888,52 @@ export function activate(context: vscode.ExtensionContext) {
             );
 
             // Generate the HTML content for the profile
-            panel.webview.html = getProfileWebviewContent(panel.webview, userData, repositories);
+            panel.webview.html = getProfileWebviewContent(panel.webview, userData, repositories, organizations, pinnedRepos, recentEvents, topLanguages, profileReadme);
 
             // Handle messages from the webview
             panel.webview.onDidReceiveMessage(
                 async message => {
+                    console.log('Received message from webview:', message);
                     switch (message.command) {
                         case 'openRepo':
                             try {
+                                console.log('Processing openRepo command');
                                 const repoUrl = message.repoUrl;
                                 const repoName = message.repoName;
-                                
-                                // Show progress while cloning
-                                vscode.window.withProgress({
-                                    location: vscode.ProgressLocation.Notification,
-                                    title: `Opening ${repoName}...`,
-                                    cancellable: false
-                                }, async (progress) => {
-                                    progress.report({ message: 'Setting up workspace' });
-                                    
-                                    // Open the repository in a new window
-                                    const uri = vscode.Uri.parse(repoUrl);
-                                    await vscode.commands.executeCommand('git.clone', uri);
-                                });
+                                console.log(`Repository URL: ${repoUrl}, Name: ${repoName}`);
+
+                                // Extract owner and repo from the URL
+                                // repoUrl is like: https://github.com/owner/repo.git
+                                const urlMatch = repoUrl.match(/github\.com[\/:]([^\/]+)\/([^\/\.]+)/);
+                                console.log('URL match result:', urlMatch);
+                                if (urlMatch) {
+                                    const [, owner, repo] = urlMatch;
+                                    console.log(`Extracted owner: ${owner}, repo: ${repo}`);
+
+                                    // Use the command to expand the repository
+                                    await vscode.commands.executeCommand('github-activity-dashboard.expandProfileRepo', owner, repo);
+                                } else {
+                                    console.log('Failed to parse repository URL');
+                                    vscode.window.showErrorMessage('Invalid repository URL format');
+                                }
                             } catch (error: any) {
+                                console.error('Error in openRepo handler:', error);
                                 vscode.window.showErrorMessage(`Failed to open repository: ${error.message}`);
+                            }
+                            break;
+                        case 'openOrg':
+                            try {
+                                const orgUrl = `https://github.com/${message.orgName}`;
+                                await vscode.env.openExternal(vscode.Uri.parse(orgUrl));
+                            } catch (error: any) {
+                                vscode.window.showErrorMessage(`Failed to open organization: ${error.message}`);
+                            }
+                            break;
+                        case 'openEvent':
+                            try {
+                                await vscode.env.openExternal(vscode.Uri.parse(message.eventUrl));
+                            } catch (error: any) {
+                                vscode.window.showErrorMessage(`Failed to open event: ${error.message}`);
                             }
                             break;
                     }
@@ -756,9 +1094,383 @@ export function activate(context: vscode.ExtensionContext) {
         const doc = await vscode.workspace.openTextDocument({ content, language: languageId });
         await vscode.window.showTextDocument(doc, { preview: true });
     });
+
+    vscode.commands.registerCommand('github-activity-dashboard.openProfileFile', async (item: ProfileRepoTreeItem) => {
+        if (!item.repoInfo?.owner || !item.repoInfo?.repo || !item.repoInfo?.sha) return;
+        
+        const octokit = new Octokit({ 
+            auth: (await vscode.authentication.getSession('github', ['repo'], { createIfNone: true })).accessToken 
+        });
+
+        try {
+            const blob = await octokit.git.getBlob({
+                owner: item.repoInfo.owner,
+                repo: item.repoInfo.repo,
+                file_sha: item.repoInfo.sha
+            });
+
+            const content = Buffer.from(blob.data.content, 'base64').toString('utf8');
+            const fileExtension = item.label.split('.').pop();
+            const languageId = getLanguageId(fileExtension || '');
+            const doc = await vscode.workspace.openTextDocument({ 
+                content, 
+                language: languageId 
+            });
+            await vscode.window.showTextDocument(doc, { preview: true });
+        } catch (err: any) {
+            vscode.window.showErrorMessage(`Failed to open file: ${err.message}`);
+        }
+    });
+
+    vscode.commands.registerCommand('github-activity-dashboard.openRepo', async (owner: string, repo: string) => {
+        try {
+            const repoUrl = `https://github.com/${owner}/${repo}`;
+            const uri = vscode.Uri.parse(repoUrl);
+            await vscode.env.openExternal(uri);
+        } catch (error: any) {
+            vscode.window.showErrorMessage(`Failed to open repository: ${error.message}`);
+        }
+    });
+
+    vscode.commands.registerCommand('github-activity-dashboard.testExpandRepo', async () => {
+        const owner = await vscode.window.showInputBox({
+            prompt: 'Enter repository owner',
+            placeHolder: 'e.g., microsoft'
+        });
+
+        const repo = await vscode.window.showInputBox({
+            prompt: 'Enter repository name',
+            placeHolder: 'e.g., vscode'
+        });
+
+        if (owner && repo) {
+            await vscode.commands.executeCommand('github-activity-dashboard.expandProfileRepo', owner, repo);
+        }
+    });
+
+    vscode.commands.registerCommand('github-activity-dashboard.viewWorkflowRuns', async (owner: string, repo: string) => {
+        try {
+            const workflowUrl = `https://github.com/${owner}/${repo}/actions`;
+            await vscode.env.openExternal(vscode.Uri.parse(workflowUrl));
+        } catch (error: any) {
+            vscode.window.showErrorMessage(`Failed to open workflow runs: ${error.message}`);
+        }
+    });
+
+    vscode.commands.registerCommand('github-activity-dashboard.createPullRequest', async () => {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            vscode.window.showErrorMessage('No workspace folder open');
+            return;
+        }
+
+        try {
+            const git = simpleGit(workspaceFolder.uri.fsPath);
+            const remoteUrl = await git.listRemote(['--get-url', 'origin']);
+            const match = remoteUrl.match(/github\.com[/:]([\w-]+)\/([\w-]+)(?:\.git)?/);
+            
+            if (!match) {
+                vscode.window.showErrorMessage('Not a GitHub repository');
+                return;
+            }
+
+            const [, owner, repo] = match;
+            const currentBranch = await git.revparse(['--abbrev-ref', 'HEAD']);
+            
+            const title = await vscode.window.showInputBox({
+                prompt: 'Enter pull request title',
+                placeHolder: 'Fix bug in authentication...'
+            });
+
+            if (!title) return;
+
+            const body = await vscode.window.showInputBox({
+                prompt: 'Enter pull request description (optional)',
+                placeHolder: 'This PR fixes the authentication issue...'
+            });
+
+            const baseBranch = await vscode.window.showInputBox({
+                prompt: 'Enter base branch',
+                placeHolder: 'main',
+                value: 'main'
+            });
+
+            if (!baseBranch) return;
+
+            const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
+            const octokit = new Octokit({ auth: session.accessToken });
+
+            const pr = await octokit.pulls.create({
+                owner,
+                repo,
+                title,
+                body: body || '',
+                head: currentBranch,
+                base: baseBranch
+            });
+
+            vscode.window.showInformationMessage(`Pull request created: #${pr.data.number}`);
+            vscode.env.openExternal(vscode.Uri.parse(pr.data.html_url));
+
+        } catch (err: any) {
+            vscode.window.showErrorMessage(`Failed to create pull request: ${err.message}`);
+        }
+    });
+
+    vscode.commands.registerCommand('github-activity-dashboard.viewPullRequest', async (repoFullName: string, prNumber: number) => {
+        try {
+            const prUrl = `https://github.com/${repoFullName}/pull/${prNumber}`;
+            await vscode.env.openExternal(vscode.Uri.parse(prUrl));
+        } catch (error: any) {
+            vscode.window.showErrorMessage(`Failed to open pull request: ${error.message}`);
+        }
+    });
+
+    vscode.commands.registerCommand('github-activity-dashboard.createBranch', async () => {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            vscode.window.showErrorMessage('No workspace folder open');
+            return;
+        }
+
+        try {
+            const branchName = await vscode.window.showInputBox({
+                prompt: 'Enter new branch name',
+                placeHolder: 'feature/new-feature'
+            });
+
+            if (!branchName) return;
+
+            const git = simpleGit(workspaceFolder.uri.fsPath);
+            await git.checkoutLocalBranch(branchName);
+            
+            vscode.window.showInformationMessage(`Branch '${branchName}' created and checked out`);
+
+        } catch (err: any) {
+            vscode.window.showErrorMessage(`Failed to create branch: ${err.message}`);
+        }
+    });
+
+    vscode.commands.registerCommand('github-activity-dashboard.switchBranch', async (owner: string, repo: string, branchName: string) => {
+        try {
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            if (workspaceFolder) {
+                const git = simpleGit(workspaceFolder.uri.fsPath);
+                await git.checkout(branchName);
+                vscode.window.showInformationMessage(`Switched to branch '${branchName}'`);
+            } else {
+                // If no workspace, just show info
+                vscode.window.showInformationMessage(`Branch: ${branchName} in ${owner}/${repo}`);
+            }
+        } catch (error: any) {
+            vscode.window.showErrorMessage(`Failed to switch branch: ${error.message}`);
+        }
+    });
+
+    vscode.commands.registerCommand('github-activity-dashboard.createRelease', async () => {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            vscode.window.showErrorMessage('No workspace folder open');
+            return;
+        }
+
+        try {
+            const git = simpleGit(workspaceFolder.uri.fsPath);
+            const remoteUrl = await git.listRemote(['--get-url', 'origin']);
+            const match = remoteUrl.match(/github\.com[/:]([\w-]+)\/([\w-]+)(?:\.git)?/);
+            
+            if (!match) {
+                vscode.window.showErrorMessage('Not a GitHub repository');
+                return;
+            }
+
+            const [, owner, repo] = match;
+            const tags = await git.tags();
+            const latestTag = tags.latest || 'v1.0.0';
+
+            const tagName = await vscode.window.showInputBox({
+                prompt: 'Enter tag name for release',
+                placeHolder: 'v1.1.0',
+                value: latestTag
+            });
+
+            if (!tagName) return;
+
+            const title = await vscode.window.showInputBox({
+                prompt: 'Enter release title',
+                placeHolder: 'Release v1.1.0'
+            });
+
+            if (!title) return;
+
+            const body = await vscode.window.showInputBox({
+                prompt: 'Enter release description (optional)',
+                placeHolder: 'This release includes...'
+            });
+
+            const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
+            const octokit = new Octokit({ auth: session.accessToken });
+
+            const release = await octokit.repos.createRelease({
+                owner,
+                repo,
+                tag_name: tagName,
+                name: title,
+                body: body || '',
+                draft: false,
+                prerelease: tagName.includes('beta') || tagName.includes('alpha')
+            });
+
+            vscode.window.showInformationMessage(`Release created: ${release.data.tag_name}`);
+            vscode.env.openExternal(vscode.Uri.parse(release.data.html_url));
+
+        } catch (err: any) {
+            vscode.window.showErrorMessage(`Failed to create release: ${err.message}`);
+        }
+    });
+
+    vscode.commands.registerCommand('github-activity-dashboard.viewRepositoryStats', async () => {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            vscode.window.showErrorMessage('No workspace folder open');
+            return;
+        }
+
+        try {
+            const git = simpleGit(workspaceFolder.uri.fsPath);
+            const remoteUrl = await git.listRemote(['--get-url', 'origin']);
+            const match = remoteUrl.match(/github\.com[/:]([\w-]+)\/([\w-]+)(?:\.git)?/);
+            
+            if (!match) {
+                vscode.window.showErrorMessage('Not a GitHub repository');
+                return;
+            }
+
+            const [, owner, repo] = match;
+            const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
+            const octokit = new Octokit({ auth: session.accessToken });
+
+            const [repoData, contributors, languages] = await Promise.all([
+                octokit.repos.get({ owner, repo }),
+                octokit.repos.listContributors({ owner, repo }),
+                octokit.repos.listLanguages({ owner, repo })
+            ]);
+
+            const stats = repoData.data;
+            const totalContributors = contributors.data.length;
+            const languageStats = Object.entries(languages.data)
+                .sort(([,a]: any, [,b]: any) => b - a)
+                .slice(0, 5)
+                .map(([lang, bytes]: any) => `${lang}: ${Math.round(bytes / 1024)} KB`)
+                .join(', ');
+
+            const message = `📊 Repository Statistics for ${owner}/${repo}:
+⭐ Stars: ${stats.stargazers_count}
+🍴 Forks: ${stats.forks_count}
+👀 Watchers: ${stats.watchers_count}
+🐛 Open Issues: ${stats.open_issues_count}
+👥 Contributors: ${totalContributors}
+💻 Languages: ${languageStats}
+📅 Created: ${new Date(stats.created_at).toLocaleDateString()}
+🔄 Updated: ${new Date(stats.updated_at).toLocaleDateString()}`;
+
+            vscode.window.showInformationMessage(message, 'View on GitHub').then(selection => {
+                if (selection === 'View on GitHub') {
+                    vscode.env.openExternal(vscode.Uri.parse(stats.html_url));
+                }
+            });
+
+        } catch (err: any) {
+            vscode.window.showErrorMessage(`Failed to get repository stats: ${err.message}`);
+        }
+    });
+
+    vscode.commands.registerCommand('github-activity-dashboard.searchCode', async () => {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            vscode.window.showErrorMessage('No workspace folder open');
+            return;
+        }
+
+        try {
+            const git = simpleGit(workspaceFolder.uri.fsPath);
+            const remoteUrl = await git.listRemote(['--get-url', 'origin']);
+            const match = remoteUrl.match(/github\.com[/:]([\w-]+)\/([\w-]+)(?:\.git)?/);
+            
+            if (!match) {
+                vscode.window.showErrorMessage('Not a GitHub repository');
+                return;
+            }
+
+            const [, owner, repo] = match;
+
+            const query = await vscode.window.showInputBox({
+                prompt: 'Enter search query',
+                placeHolder: 'function login'
+            });
+
+            if (!query) return;
+
+            const searchUrl = `https://github.com/${owner}/${repo}/search?q=${encodeURIComponent(query)}&type=code`;
+            await vscode.env.openExternal(vscode.Uri.parse(searchUrl));
+
+        } catch (err: any) {
+            vscode.window.showErrorMessage(`Failed to search code: ${err.message}`);
+        }
+    });
+
+    vscode.commands.registerCommand('github-activity-dashboard.createGist', async () => {
+        try {
+            const filename = await vscode.window.showInputBox({
+                prompt: 'Enter filename',
+                placeHolder: 'example.js'
+            });
+
+            if (!filename) return;
+
+            const content = await vscode.window.showInputBox({
+                prompt: 'Enter gist content',
+                placeHolder: 'console.log("Hello, World!");'
+            });
+
+            if (!content) return;
+
+            const description = await vscode.window.showInputBox({
+                prompt: 'Enter gist description (optional)',
+                placeHolder: 'A simple example'
+            });
+
+            const isPublic = await vscode.window.showQuickPick(['Public', 'Secret'], {
+                placeHolder: 'Choose visibility'
+            });
+
+            if (!isPublic) return;
+
+            const session = await vscode.authentication.getSession('github', ['gist'], { createIfNone: true });
+            const octokit = new Octokit({ auth: session.accessToken });
+
+            const gist = await octokit.gists.create({
+                description: description || '',
+                public: isPublic === 'Public',
+                files: {
+                    [filename]: {
+                        content: content
+                    }
+                }
+            });
+
+            vscode.window.showInformationMessage(`Gist created successfully!`);
+            if (gist.data.html_url) {
+                vscode.env.openExternal(vscode.Uri.parse(gist.data.html_url));
+            }
+
+        } catch (err: any) {
+            vscode.window.showErrorMessage(`Failed to create gist: ${err.message}`);
+        }
+    });
 }
 
-function getProfileWebviewContent(webview: vscode.Webview, userData: any, repositories: any[] = []): string {
+function getProfileWebviewContent(webview: vscode.Webview, userData: any, repositories: any[] = [], organizations: any[] = [], pinnedRepos: any[] = [], recentEvents: any[] = [], topLanguages: [string, number][] = [], profileReadme: string | null = null): string {
     const nonce = getNonce();
     return `
         <!DOCTYPE html>
@@ -1000,29 +1712,286 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     margin-left: auto;
                 }
                 
-                /* Footer */
-                .profile-footer {
+                /* Organizations Section */
+                .orgs-section {
                     margin-top: 32px;
-                    padding-top: 16px;
-                    border-top: 1px solid #21262d;
-                    text-align: center;
                 }
-                .github-link {
-                    display: inline-flex;
+                .orgs-header {
+                    display: flex;
                     align-items: center;
-                    gap: 8px;
-                    padding: 5px 16px;
-                    border: 1px solid #30363d;
-                    border-radius: 6px;
-                    background-color: #21262d;
-                    color: #f0f6fc;
-                    text-decoration: none;
-                    font-size: 14px;
-                    font-weight: 500;
-                    transition: background-color 0.2s;
+                    justify-content: space-between;
+                    margin-bottom: 16px;
+                    padding-bottom: 8px;
+                    border-bottom: 1px solid #21262d;
                 }
-                .github-link:hover {
-                    background-color: #30363d;
+                .orgs-title {
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: #f0f6fc;
+                }
+                .orgs-count {
+                    background-color: #21262d;
+                    color: #e6edf3;
+                    font-size: 12px;
+                    font-weight: 500;
+                    padding: 0 6px;
+                    border-radius: 2em;
+                    line-height: 18px;
+                }
+                .orgs-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+                    gap: 12px;
+                }
+                .org-card {
+                    border: 1px solid #21262d;
+                    border-radius: 6px;
+                    padding: 12px;
+                    background-color: #0d1117;
+                    transition: border-color 0.2s;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                }
+                .org-card:hover {
+                    border-color: #30363d;
+                }
+                .org-avatar {
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 6px;
+                    border: 1px solid #30363d;
+                }
+                .org-info h4 {
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: #2f81f7;
+                    margin: 0 0 2px 0;
+                }
+                .org-info p {
+                    font-size: 12px;
+                    color: #7d8590;
+                    margin: 0;
+                }
+                
+                /* Pinned Repositories Section */
+                .pinned-section {
+                    margin-top: 32px;
+                }
+                .pinned-header {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    margin-bottom: 16px;
+                    padding-bottom: 8px;
+                    border-bottom: 1px solid #21262d;
+                }
+                .pinned-title {
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: #f0f6fc;
+                }
+                .pinned-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+                    gap: 16px;
+                }
+                .pinned-card {
+                    border: 1px solid #21262d;
+                    border-radius: 6px;
+                    padding: 16px;
+                    background-color: #0d1117;
+                    transition: border-color 0.2s;
+                    cursor: pointer;
+                }
+                .pinned-card:hover {
+                    border-color: #30363d;
+                }
+                .pinned-header-row {
+                    display: flex;
+                    align-items: flex-start;
+                    justify-content: space-between;
+                    margin-bottom: 8px;
+                }
+                .pinned-name {
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: #2f81f7;
+                    text-decoration: none;
+                    margin: 0;
+                }
+                .pinned-visibility {
+                    font-size: 12px;
+                    font-weight: 500;
+                    padding: 0 7px;
+                    border-radius: 2em;
+                    border: 1px solid #21262d;
+                    color: #7d8590;
+                    line-height: 18px;
+                }
+                .pinned-description {
+                    font-size: 12px;
+                    color: #7d8590;
+                    margin-bottom: 8px;
+                    line-height: 1.33;
+                }
+                .pinned-footer {
+                    display: flex;
+                    align-items: center;
+                    gap: 16px;
+                    font-size: 12px;
+                    color: #7d8590;
+                }
+                
+                /* Activity Section */
+                .activity-section {
+                    margin-top: 32px;
+                }
+                .activity-header {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    margin-bottom: 16px;
+                    padding-bottom: 8px;
+                    border-bottom: 1px solid #21262d;
+                }
+                .activity-title {
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: #f0f6fc;
+                }
+                .activity-list {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                }
+                .activity-item {
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    padding: 12px;
+                    border: 1px solid #21262d;
+                    border-radius: 6px;
+                    background-color: #0d1117;
+                    cursor: pointer;
+                    transition: border-color 0.2s;
+                }
+                .activity-item:hover {
+                    border-color: #30363d;
+                }
+                .activity-icon {
+                    width: 16px;
+                    height: 16px;
+                    color: #7d8590;
+                    flex-shrink: 0;
+                }
+                .activity-content {
+                    flex: 1;
+                    font-size: 12px;
+                    color: #e6edf3;
+                }
+                .activity-repo {
+                    font-weight: 500;
+                    color: #2f81f7;
+                }
+                .activity-time {
+                    font-size: 11px;
+                    color: #7d8590;
+                }
+                
+                /* Languages Section */
+                .languages-section {
+                    margin-top: 32px;
+                }
+                .languages-header {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    margin-bottom: 16px;
+                    padding-bottom: 8px;
+                    border-bottom: 1px solid #21262d;
+                }
+                .languages-title {
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: #f0f6fc;
+                }
+                .languages-list {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                }
+                .language-item {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    padding: 4px 8px;
+                    border-radius: 12px;
+                    background-color: #21262d;
+                    font-size: 12px;
+                    color: #e6edf3;
+                }
+                .language-color {
+                    width: 10px;
+                    height: 10px;
+                    border-radius: 50%;
+                }
+                
+                /* Profile README Section */
+                .readme-section {
+                    margin-top: 32px;
+                }
+                .readme-header {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    margin-bottom: 16px;
+                    padding-bottom: 8px;
+                    border-bottom: 1px solid #21262d;
+                }
+                .readme-title {
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: #f0f6fc;
+                }
+                .readme-content {
+                    border: 1px solid #21262d;
+                    border-radius: 6px;
+                    padding: 16px;
+                    background-color: #0d1117;
+                    font-size: 14px;
+                    line-height: 1.5;
+                    color: #e6edf3;
+                    overflow-x: auto;
+                }
+                .readme-content h1,
+                .readme-content h2,
+                .readme-content h3 {
+                    color: #f0f6fc;
+                    margin-top: 16px;
+                    margin-bottom: 8px;
+                }
+                .readme-content h1 { font-size: 20px; }
+                .readme-content h2 { font-size: 18px; }
+                .readme-content h3 { font-size: 16px; }
+                .readme-content code {
+                    background-color: #21262d;
+                    padding: 2px 4px;
+                    border-radius: 3px;
+                    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+                    font-size: 12px;
+                }
+                .readme-content pre {
+                    background-color: #21262d;
+                    padding: 12px;
+                    border-radius: 6px;
+                    overflow-x: auto;
+                    margin: 8px 0;
+                }
+                .readme-content pre code {
+                    background-color: transparent;
+                    padding: 0;
                 }
                 
                 /* Responsive */
@@ -1172,6 +2141,169 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     </div>
                 </div>
 
+                <!-- Organizations Section -->
+                ${organizations.length > 0 ? `
+                <div class="orgs-section">
+                    <div class="orgs-header">
+                        <h2 class="orgs-title">Organizations</h2>
+                        <span class="orgs-count">${organizations.length}</span>
+                    </div>
+                    
+                    <div class="orgs-grid">
+                        ${organizations.map(org => `
+                            <div class="org-card" onclick="openOrganization('${org.login}')">
+                                <img src="${org.avatar_url}" alt="${org.login}" class="org-avatar">
+                                <div class="org-info">
+                                    <h4>${org.login}</h4>
+                                    <p>${org.description || 'No description'}</p>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                ` : ''}
+
+                <!-- Pinned Repositories Section -->
+                ${pinnedRepos.length > 0 ? `
+                <div class="pinned-section">
+                    <div class="pinned-header">
+                        <h2 class="pinned-title">Pinned Repositories</h2>
+                    </div>
+                    
+                    <div class="pinned-grid">
+                        ${pinnedRepos.map(repo => `
+                            <div class="pinned-card" onclick="openRepository('${repo.url}', '${repo.name}')">
+                                <div class="pinned-header-row">
+                                    <h3 class="pinned-name">${repo.name}</h3>
+                                    <span class="pinned-visibility ${repo.isPrivate ? 'private' : 'public'}">
+                                        ${repo.isPrivate ? 'Private' : 'Public'}
+                                    </span>
+                                </div>
+                                ${repo.description ? `<p class="pinned-description">${repo.description}</p>` : ''}
+                                <div class="pinned-footer">
+                                    ${repo.primaryLanguage ? `
+                                        <div class="repo-meta">
+                                            <span class="repo-language-color" style="background-color: ${repo.primaryLanguage.color}"></span>
+                                            ${repo.primaryLanguage.name}
+                                        </div>
+                                    ` : ''}
+                                    <div class="repo-meta">
+                                        <svg class="star-icon" viewBox="0 0 16 16" fill="currentColor">
+                                            <path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/>
+                                        </svg>
+                                        ${repo.stargazers.totalCount}
+                                    </div>
+                                    <div class="repo-meta">
+                                        <svg class="fork-icon" viewBox="0 0 16 16" fill="currentColor">
+                                            <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878z"/>
+                                        </svg>
+                                        ${repo.forks.totalCount}
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                ` : ''}
+
+                <!-- Recent Activity Section -->
+                ${recentEvents.length > 0 ? `
+                <div class="activity-section">
+                    <div class="activity-header">
+                        <h2 class="activity-title">Recent Activity</h2>
+                    </div>
+                    
+                    <div class="activity-list">
+                        ${recentEvents.slice(0, 10).map(event => {
+                            const eventTime = new Date(event.created_at);
+                            const timeAgo = getTimeAgo(eventTime);
+                            
+                            let icon = 'git-commit';
+                            let action = '';
+                            
+                            switch (event.type) {
+                                case 'PushEvent':
+                                    icon = 'git-commit';
+                                    action = `Pushed ${event.payload.commits?.length || 0} commit(s) to`;
+                                    break;
+                                case 'PullRequestEvent':
+                                    icon = 'git-pull-request';
+                                    action = `${event.payload.action} a pull request in`;
+                                    break;
+                                case 'IssuesEvent':
+                                    icon = 'issues';
+                                    action = `${event.payload.action} an issue in`;
+                                    break;
+                                case 'CreateEvent':
+                                    icon = 'add';
+                                    action = `Created ${event.payload.ref_type} in`;
+                                    break;
+                                case 'DeleteEvent':
+                                    icon = 'trash';
+                                    action = `Deleted ${event.payload.ref_type} in`;
+                                    break;
+                                case 'ForkEvent':
+                                    icon = 'repo-forked';
+                                    action = `Forked`;
+                                    break;
+                                case 'WatchEvent':
+                                    icon = 'star';
+                                    action = `Starred`;
+                                    break;
+                                default:
+                                    icon = 'circle';
+                                    action = `${event.type.replace('Event', '').toLowerCase()} in`;
+                            }
+                            
+                            return `
+                                <div class="activity-item" onclick="openEvent('${event.repo.url.replace('api.github.com/repos', 'github.com')}')">
+                                    <svg class="activity-icon" viewBox="0 0 16 16" fill="currentColor">
+                                        <path d="${getActivityIconPath(icon)}"/>
+                                    </svg>
+                                    <div class="activity-content">
+                                        <span>${action}</span>
+                                        <span class="activity-repo">${event.repo.name}</span>
+                                    </div>
+                                    <span class="activity-time">${timeAgo}</span>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+                ` : ''}
+
+                <!-- Languages Section -->
+                ${topLanguages.length > 0 ? `
+                <div class="languages-section">
+                    <div class="languages-header">
+                        <h2 class="languages-title">Most Used Languages</h2>
+                    </div>
+                    
+                    <div class="languages-list">
+                        ${topLanguages.map(([lang, count]) => `
+                            <div class="language-item">
+                                <span class="language-color" style="background-color: ${getLanguageColor(lang)}"></span>
+                                <span>${lang}</span>
+                                <span>${count}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                ` : ''}
+
+                <!-- Profile README Section -->
+                ${profileReadme ? `
+                <div class="readme-section">
+                    <div class="readme-header">
+                        <h2 class="readme-title">README</h2>
+                    </div>
+                    
+                    <div class="readme-content">
+                        ${marked(profileReadme)}
+                    </div>
+                </div>
+                ` : ''}
+
                 <!-- Footer -->
                 <div class="profile-footer">
                     <a href="${userData.html_url}" target="_blank" class="github-link">
@@ -1186,11 +2318,17 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
             <script nonce="${nonce}">
                 const vscode = acquireVsCodeApi();
                 
-                function openRepository(repoUrl, repoName) {
+                function openOrganization(orgName) {
                     vscode.postMessage({
-                        command: 'openRepo',
-                        repoUrl: repoUrl,
-                        repoName: repoName
+                        command: 'openOrg',
+                        orgName: orgName
+                    });
+                }
+                
+                function openEvent(eventUrl) {
+                    vscode.postMessage({
+                        command: 'openEvent',
+                        eventUrl: eventUrl
                     });
                 }
             </script>
@@ -1243,6 +2381,85 @@ function getNonce(): string {
         text += possible.charAt(Math.floor(Math.random() * possible.length));
     }
     return text;
+}
+
+// Helper function to format time ago
+function getTimeAgo(date: Date): string {
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / (1000 * 60));
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    
+    if (minutes < 1) return 'now';
+    if (minutes < 60) return `${minutes}m`;
+    if (hours < 24) return `${hours}h`;
+    if (days < 30) return `${days}d`;
+    if (days < 365) return `${Math.floor(days / 30)}mo`;
+    return `${Math.floor(days / 365)}y`;
+}
+
+// Helper function to get activity icon paths
+function getActivityIconPath(icon: string): string {
+    const iconPaths: { [key: string]: string } = {
+        'git-commit': 'M10.5 7.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM8.75 7.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM10.5 9.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM8.75 9.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM10.5 11.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM8.75 11.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM10.5 13.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM8.75 13.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM2.5 2.75a.75.75 0 00-1.5 0v10.5a.75.75 0 001.5 0V2.75z',
+        'git-pull-request': 'M1.5 3.25a2.25 2.25 0 113 2.122v5.256a2.251 2.251 0 11-1.5 0V5.372A2.25 2.25 0 011.5 3.25zm5.677-.177L9.573.677A.25.25 0 0110 .854V2.5h1A2.5 2.5 0 0113.5 5v5.628a2.251 2.251 0 101.5 0V5a4 4 0 00-4-4h-1V.854a.25.25 0 01.43-.177L7.177 3.073a.25.25 0 010 .354zM3.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm0 9.5a.75.75 0 100 1.5.75.75 0 000-1.5zm8.25.75a.75.75 0 100 1.5.75.75 0 000-1.5z',
+        'issues': 'M8 9.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM1.5 1.75a.25.25 0 01.25-.25h8.5a.25.25 0 01.25.25v5.5a.25.25 0 01-.25.25h-3.5a.75.75 0 00-.53.22L3.5 11.44V9.25a.75.75 0 00-.75-.75h-1a.25.25 0 01-.25-.25v-5.5zM1.75 1h8.5v5.5h-2.75V9.25c0 .138.112.25.25.25h1.25l2.5 2.5v-2.5h.75v-5.5a1.75 1.75 0 00-1.75-1.75h-8.5A1.75 1.75 0 000 1.75v5.5C0 8.216.784 9 1.75 9H2.5v2.5l2.5-2.5H7.25a.25.25 0 00.25-.25V6.75h2.75V1.75z',
+        'add': 'M7.75 2a.75.75 0 01.75.75V7h4.25a.75.75 0 110 1.5H8.5v4.25a.75.75 0 11-1.5 0V8.5H2.75a.75.75 0 010-1.5H7V2.75A.75.75 0 017.75 2z',
+        'trash': 'M11 1.75a.25.25 0 01.25-.25h2.5a.25.25 0 01.25.25v.5a.25.25 0 01-.25.25h-.5v8.5a1.75 1.75 0 01-1.75 1.75h-7a1.75 1.75 0 01-1.75-1.75v-8.5h-.5a.25.25 0 01-.25-.25v-.5a.25.25 0 01.25-.25h2.5a.25.25 0 01.25.25v-.5A1.75 1.75 0 015.25 0h3.5A1.75 1.75 0 0110 1.75v.5a.25.25 0 01-.25.25h-.5zM4.5 2.75v8.5a.25.25 0 00.25.25h4.5a.25.25 0 00.25-.25v-8.5a.25.25 0 00-.25-.25h-4.5a.25.25 0 00-.25.25zM6.25 3.5v6a.25.25 0 01-.5 0v-6a.25.25 0 01.5 0zm1.5 0v6a.25.25 0 01-.5 0v-6a.25.25 0 01.5 0z',
+        'repo-forked': 'M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm-1.75 7.378a.75.75 0 100 1.5.75.75 0 000-1.5zm3-8.75a.75.75 0 100 1.5.75.75 0 000-1.5z',
+        'star': 'M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z',
+        'circle': 'M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1112 0A6 6 0 012 8z'
+    };
+    return iconPaths[icon] || iconPaths['circle'];
+}
+
+// Helper function to get language colors
+function getLanguageColor(language: string): string {
+    const colors: { [key: string]: string } = {
+        'JavaScript': '#f1e05a',
+        'TypeScript': '#3178c6',
+        'Python': '#3572A5',
+        'Java': '#b07219',
+        'HTML': '#e34c26',
+        'CSS': '#563d7c',
+        'C': '#555555',
+        'C++': '#f34b7d',
+        'C#': '#239120',
+        'Go': '#00ADD8',
+        'Rust': '#dea584',
+        'PHP': '#4F5D95',
+        'Ruby': '#701516',
+        'Swift': '#fa7343',
+        'Kotlin': '#A97BFF',
+        'Dart': '#00B4AB',
+        'Scala': '#c22d40',
+        'R': '#198CE7',
+        'Shell': '#89e051',
+        'PowerShell': '#012456',
+        'Vue': '#4FC08D',
+        'React': '#61DAFB'
+    };
+    return colors[language] || '#586069';
+}
+
+// Simple markdown parser for README
+function marked(text: string): string {
+    if (!text) return '';
+    
+    // Basic markdown parsing
+    return text
+        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+        .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
+        .replace(/\*(.*)\*/gim, '<em>$1</em>')
+        .replace(/`([^`]+)`/gim, '<code>$1</code>')
+        .replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>')
+        .replace(/\n\n/gim, '</p><p>')
+        .replace(/\n/gim, '<br>')
+        .replace(/^/, '<p>')
+        .replace(/$/, '</p>');
 }
 
 export function deactivate() {}

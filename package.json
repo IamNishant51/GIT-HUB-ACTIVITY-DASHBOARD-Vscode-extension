@@ -134,8 +134,34 @@
         "command": "github-activity-dashboard.searchCode",
         "title": "Search Code in Repository",
         "icon": "$(search)"
+      },
+      {
+        "command": "github-activity-dashboard.createRepo",
+        "title": "Create New Repository",
+        "icon": "$(add)"
+      },
+      {
+        "command": "github-activity-dashboard.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
       }
-    ]
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "github-activity-dashboard.createRepo",
+          "when": "view == github-profile-repos",
+          "group": "navigation",
+          "icon": "$(add)"
+        },
+        {
+          "command": "github-activity-dashboard.refresh",
+          "when": "view == github-profile-repos",
+          "group": "navigation",
+          "icon": "$(refresh)"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
@@ -165,7 +191,7 @@
     "webpack-cli": "^5.1.4"
   },
   "dependencies": {
-    "@octokit/rest": "^20.0.1",
-    "simple-git": "^3.28.0"
+    "@octokit/rest": "^18.12.0",
+    "simple-git": "^2.48.0"
   }
 }

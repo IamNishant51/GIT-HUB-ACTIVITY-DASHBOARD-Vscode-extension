@@ -1,71 +1,81 @@
 # GitHub Activity Dashboard 🚀
 
-[![VS Code](https://img.shields.io/badge/VS_Code-1.80+-blue.svg)](https://code.visualstudio.com/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![GitHub API](https://img.shields.io/badge/GitHub-API-green.svg)](https://docs.github.com/en/rest)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
-> Bring your GitHub workflow directly into VS Code! Monitor activities, manage repositories, and stay updated with notifications - all without leaving your editor.
+<p align="center">
+  <img src="images/preview.gif" alt="GitHub Activity Dashboard Preview" width="600">
+</p>
 
 <p align="center">
-  <img src="images/preview.gif" alt="GitHub Activity Dashboard Preview" width="600px">
+  <a href="https://code.visualstudio.com/">
+    <img src="https://img.shields.io/badge/VS_Code-1.80%2B-blue.svg" alt="VS Code Version">
+  </a>
+  <a href="https://www.typescriptlang.org/">
+    <img src="https://img.shields.io/badge/TypeScript-007ACC?style=flat&logo=typescript&logoColor=white" alt="TypeScript">
+  </a>
+  <a href="https://docs.github.com/en/rest">
+    <img src="https://img.shields.io/badge/GitHub-API-green.svg" alt="GitHub API">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License">
+  </a>
 </p>
+
+> **Bring your GitHub workflow directly into VS Code!**  
+> Monitor activities, manage repositories, and stay updated with notifications—all without leaving your editor.
+
+---
 
 ## ✨ Features
 
-### 📊 Activity Tracking
-- View assigned issues and pull requests
-- Track PRs awaiting your review
-- Monitor recent activities in real-time
+- **📊 Activity Tracking:**  
+  View assigned issues & PRs, track PRs awaiting your review, monitor recent activities in real-time.
 
-### 📂 Repository Management
-- Browse current repository contents
-- Quick access to files and folders
-- View branch information
+- **📂 Repository Management:**  
+  Browse repository contents, quick access to files & folders, view branch information.
 
-### 📜 Git History
-- Track recent commits in your workspace
-- Monitor branch activities
-- View detailed commit information
+- **📜 Git History:**  
+  Track recent commits in your workspace, monitor branch activities, view detailed commit info.
 
-### ⭐ Stars Explorer
-- Browse your starred repositories
-- Quick access to favorite projects
-- Discover trending repositories
+- **⭐ Stars Explorer:**  
+  Browse your starred repositories, quick access to favorites, discover trending repos.
 
-### 🔔 Notifications
-- Real-time GitHub notifications
-- PR and Issue updates
-- Mention alerts
+- **🔔 Notifications:**  
+  Get real-time GitHub notifications, PR & Issue updates, and mention alerts.
 
-### 👤 Profile Integration
-- View your GitHub profile
-- Quick repository access
-- Clone repositories directly
+- **👤 Profile Integration:**  
+  View your GitHub profile, quick repository access, clone repositories directly.
+
+---
 
 ## 🛠️ Requirements
 
-- VS Code 1.80+
-- Git installed and available in PATH
+- [VS Code](https://code.visualstudio.com/) **1.80+**
+- [Git](https://git-scm.com/downloads) installed & available in PATH
 - GitHub account authentication
+
+---
 
 ## 📥 Installation
 
-1. Open VS Code
-2. Press `Ctrl+P` / `Cmd+P`
+1. Open **VS Code**
+2. Press <kbd>Ctrl+P</kbd> / <kbd>Cmd+P</kbd>
 3. Type `ext install github-activity-dashboard`
-4. Click Install
+4. Click **Install**
+
+---
 
 ## 🔐 Authentication
 
 The extension uses VS Code's built-in GitHub authentication:
-1. Click "Sign in to GitHub" when prompted
+
+1. Click **Sign in to GitHub** when prompted
 2. Complete the authentication process
-3. Start using the extension
+3. Start using the extension!
+
+---
 
 ## ⚙️ Development
 
-Want to contribute? Great! Here's how to set up the development environment:
+Want to contribute? Awesome! Here’s how to set up your development environment:
 
 ```bash
 # Clone the repository
@@ -80,19 +90,24 @@ npm run compile
 # Watch for changes
 npm run watch
 
-# Package for distribution
+# Package for distribution/publishing
 npm run package
+```
 
-## Known Issues 🐛
+---
 
-- Webpack may display warnings about the optional `supports-color` dependency from `debug`. This is safe to ignore and doesn't affect functionality.
-- Some GitHub Enterprise features might require additional configuration.
-- Repository loading time may vary based on network connectivity.
-- Large repositories might take longer to display full activity history.
+## 🐛 Known Issues
 
-## Release Notes 📝
+- Webpack may display warnings about the optional `supports-color` dependency from `debug`—safe to ignore.
+- Some GitHub Enterprise features may require extra configuration.
+- Repository loading time can vary based on network connectivity.
+- Large repositories may take longer to display full activity history.
 
-### Version 1.0.0 (2024-09-07)
+---
+
+## 📝 Release Notes
+
+### **1.0.0** (2024-09-07)
 - Initial release
 - GitHub activity dashboard integration
 - Repository browser implementation
@@ -100,34 +115,15 @@ npm run package
 - Profile view functionality
 - Star management features
 
-For full release history, see [CHANGELOG.md](CHANGELOG.md)
+See [CHANGELOG.md](CHANGELOG.md) for full release history.
 
-## Development 💻
+---
 
-```bash
-# Clone the repository
-git clone https://github.com/IamNishant51/github-activity-dashboard.git
+## 📄 License
 
-# Install dependencies
-npm install
+MIT License © 2024 Nishant Unavane
 
-# Build the extension
-npm run compile
-
-# Watch for changes
-npm run watch
-
-# Package for publishing
-npm run package
-
-```bash
-
-#Licence 📄
-
-MIT License
-
-Copyright (c) 2024 Nishant Unavane
-
+```
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
@@ -145,3 +141,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+```
+---
+
+> Made with 💙 by [Nishant Unavane](https://github.com/IamNishant51)

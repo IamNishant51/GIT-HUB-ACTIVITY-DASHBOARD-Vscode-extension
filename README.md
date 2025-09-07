@@ -1,143 +1,149 @@
-# GitHub Activity Dashboard 🚀
+# GitHub Activity Dashboard for VS Code
 
-<p align="center">
-  <a href="https://code.visualstudio.com/">
-    <img src="https://img.shields.io/badge/VS_Code-1.80%2B-blue.svg" alt="VS Code Version">
-  </a>
-  <a href="https://www.typescriptlang.org/">
-    <img src="https://img.shields.io/badge/TypeScript-007ACC?style=flat&logo=typescript&logoColor=white" alt="TypeScript">
-  </a>
-  <a href="https://docs.github.com/en/rest">
-    <img src="https://img.shields.io/badge/GitHub-API-green.svg" alt="GitHub API">
-  </a>
-  <a href="LICENSE">
-    <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License">
-  </a>
-</p>
+[![VS Code](https://img.shields.io/badge/Visual_Studio_Code-0078D4?style=flat&logo=visual-studio-code&logoColor=white)](https://marketplace.visualstudio.com/)
+![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat&logo=typescript&logoColor=white)
+![GitHub](https://img.shields.io/badge/GitHub-Dashboard-blue)
 
-> **Bring your GitHub workflow directly into VS Code!**  
-> Monitor activities, manage repositories, and stay updated with notifications—all without leaving your editor.
+A comprehensive Visual Studio Code extension to visualize your GitHub activity, profile stats, repositories, organizations, issues, PRs, languages, sponsors, and more — all inside VS Code!
 
 ---
 
-## ✨ Features
+## Features ⚡
 
-- **📊 Activity Tracking:**  
-  View assigned issues & PRs, track PRs awaiting your review, monitor recent activities in real-time.
-
-- **📂 Repository Management:**  
-  Browse repository contents, quick access to files & folders, view branch information.
-
-- **📜 Git History:**  
-  Track recent commits in your workspace, monitor branch activities, view detailed commit info.
-
-- **⭐ Stars Explorer:**  
-  Browse your starred repositories, quick access to favorites, discover trending repos.
-
-- **🔔 Notifications:**  
-  Get real-time GitHub notifications, PR & Issue updates, and mention alerts.
-
-- **👤 Profile Integration:**  
-  View your GitHub profile, quick repository access, clone repositories directly.
+- **Profile Overview:** View your GitHub avatar, bio, top languages, sponsors, and pinned repositories.
+- **Repository Explorer:** Browse your repositories, inspect files, view star and fork counts, and open files in VS Code.
+- **Organization Insights:** See the organizations you belong to, explore their repositories and members.
+- **Pinned Repositories:** Highlight and quickly access your top/pinned projects.
+- **Recent Events:** Track your recent commits, pull requests, issues, and comments.
+- **Contribution Graph:** Visualize your GitHub contributions (commit heatmap, streaks, etc.).
+- **Pull Requests & Issues:** Monitor and interact with your open/closed PRs and Issues.
+- **Sponsors Data:** Display sponsorship data if you have GitHub Sponsors enabled.
+- **Comment Activity:** Analyze your comment activity across repositories.
+- **Starred Repos:** Quick access to your starred repositories.
+- **Filters & Navigation:** Easily filter and navigate through your GitHub data.
+- **Gorgeous UI:** Responsive, modern webview interface leveraging VS Code theming.
 
 ---
 
-## 🛠️ Requirements
+## Installation 📥
 
-- [VS Code](https://code.visualstudio.com/) **1.80+**
-- [Git](https://git-scm.com/downloads) installed & available in PATH
-- GitHub account authentication
-
----
-
-## 📥 Installation
-
-1. Open **VS Code**
-2. Press <kbd>Ctrl+P</kbd> / <kbd>Cmd+P</kbd>
-3. Type `ext install github-activity-dashboard`
-4. Click **Install**
+1. Open Visual Studio Code.
+2. Go to the **Extensions** view (`Ctrl+Shift+X` or `Cmd+Shift+X` on macOS).
+3. Search for **GitHub Activity Dashboard**.
+4. Click **Install**.
+5. Reload VS Code if prompted.
 
 ---
 
-## 🔐 Authentication
+## Usage 🚀
 
-The extension uses VS Code's built-in GitHub authentication:
-
-1. Click **Sign in to GitHub** when prompted
-2. Complete the authentication process
-3. Start using the extension!
-
----
-
-## ⚙️ Development
-
-Want to contribute? Awesome! Here’s how to set up your development environment:
-
-```bash
-# Clone the repository
-git clone https://github.com/IamNishant51/github-activity-dashboard.git
-
-# Install dependencies
-npm install
-
-# Build the extension
-npm run compile
-
-# Watch for changes
-npm run watch
-
-# Package for distribution/publishing
-npm run package
-```
+1. Launch the dashboard from the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) and type `GitHub: Open Activity Dashboard`.
+2. Connect your GitHub account if prompted.
+3. Explore your profile, repositories, organizations, and contribution stats interactively.
+4. Use built-in navigation and filters to find exactly what you need.
+5. Inspect file contents, open files in the VS Code editor, and manage your repositories.
 
 ---
 
-## 🐛 Known Issues
+## Key Features in Detail 🎯
 
-- Webpack may display warnings about the optional `supports-color` dependency from `debug`—safe to ignore.
-- Some GitHub Enterprise features may require extra configuration.
-- Repository loading time can vary based on network connectivity.
-- Large repositories may take longer to display full activity history.
+### Profile Webview
+- Displays avatar, bio, stats, sponsors, pinned repos, and languages.
+- Contribution chart and activity breakdown.
+
+### Repository Explorer
+- Browse all your repos.
+- Open files, view file content, star/fork counts, delete repos (with confirmation).
+
+### Organizations
+- See all orgs you’re a member of.
+- Drill into org repos and members.
+
+### Issues & Pull Requests
+- View your recent/open/closed PRs and Issues.
+- Quick access to GitHub for detailed browsing.
+
+### Sponsors & Comments
+- List of sponsors and sponsorship data (if available).
+- Comment stats across your repositories.
+
+### Interactive UI
+- Tabs for navigation: Profile, Repos, Orgs, Issues, PRs, Stars, Sponsors.
+- Responsive design for all screen sizes.
 
 ---
 
-## 📝 Release Notes
+## Requirements 🛠️
 
-### **1.0.0** (2024-09-07)
-- Initial release
-- GitHub activity dashboard integration
-- Repository browser implementation
-- Notification system integration
-- Profile view functionality
-- Star management features
-
-See [CHANGELOG.md](CHANGELOG.md) for full release history.
+- Visual Studio Code version 1.60.0 or higher.
+- Internet connection to fetch GitHub data.
+- A GitHub account.
 
 ---
 
-## 📄 License
+## Extension Settings ⚙️
 
-MIT License © 2024 Nishant Unavane
+This extension contributes the following settings:
 
-```
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+- `githubDashboard.theme`: Choose dashboard theme (auto/dark/light).
+- `githubDashboard.showSponsors`: Toggle sponsors data.
+- `githubDashboard.maxRepos`: Maximum repositories to display.
+- `githubDashboard.enableRepoActions`: Enable/disable repo management actions.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
 ---
 
- Made with ❤️ by [Nishant Unavane](https://github.com/IamNishant51)
+## Tips and Tricks 💡
+
+- Use keyboard shortcuts to quickly access dashboard features.
+- Pin your favorite repositories for instant access.
+- Filter repositories by language, activity, or stars.
+- Connect multiple GitHub accounts (coming soon).
+- Use the dashboard to prepare for code reviews and team syncs.
+
+---
+
+## Contributing 🤝
+
+Contributions are welcome! To contribute:
+
+1. Fork the repository.
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`).
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`).
+4. Push to the branch (`git push origin feature/AmazingFeature`).
+5. Open a Pull Request.
+
+---
+
+## Author ✍️
+
+Nishant Unavane  
+- GitHub: [@IamNishant51](https://github.com/IamNishant51)  
+- Email: anonymouslucifer400@gmail.com
+
+---
+
+## Support 🌟
+
+If you find this extension helpful:
+- Star the repository
+- Share it with your friends
+- Report issues or suggest features
+- Contribute to the project
+
+---
+
+## License 📄
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+---
+
+## Acknowledgments 🙏
+
+- VS Code Extension API
+- GitHub REST API
+- All contributors and users
+
+---
+
+Made with ❤️ by Nishant Unavane

@@ -1253,17 +1253,31 @@ export function activate(context: vscode.ExtensionContext) {
                                 } catch (error) {
                                     console.error('Error fetching updated repositories:', error);
                                 }
+
+                                // Fetch updated starred repositories
+                                let updatedStarredRepos: any[] = [];
+                                try {
+                                    const starredResponse = await octokit.activity.listReposStarredByAuthenticatedUser({
+                                        sort: 'updated',
+                                        per_page: 100
+                                    });
+                                    updatedStarredRepos = starredResponse.data;
+                                } catch (error) {
+                                    console.error('Error fetching updated starred repositories:', error);
+                                }
                                 
                                 panel.webview.postMessage({
                                     command: 'repoDeleted',
                                     owner: message.owner,
                                     repo: message.repo,
-                                    repositories: updatedRepos
+                                    repositories: updatedRepos,
+                                    starredRepos: updatedStarredRepos
                                 });
                                 
                                 // Refresh the providers
                                 githubRepoProvider.refresh();
                                 githubProfileReposProvider.refresh();
+                                githubStarsProvider.refresh();
                             } catch (error: any) {
                                 console.error('Error deleting repository:', error);
                                 vscode.window.showErrorMessage(`Failed to delete repository: ${error.message}`);
@@ -3086,10 +3100,25 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     }
                     if (msg.command === 'repoDeleted') {
                         const key = (msg.owner + '/' + msg.repo).toLowerCase();
+                        const keyNormal = msg.owner + '/' + msg.repo;
                         
                         // Remove from repositories array
                         REPOS = msg.repositories || REPOS.filter(r => (r.owner.login + '/' + r.name).toLowerCase() !== key);
                         document.getElementById('repoCount').textContent = String(REPOS.length);
+                        
+                        // Remove from starred repositories if it was starred
+                        if (msg.starredRepos) {
+                            STARRED = msg.starredRepos;
+                            starredSet.delete(keyNormal);
+                            document.getElementById('starCount').textContent = String(STARRED.length);
+                            renderStars(); // Re-render stars to remove the deleted repo
+                        } else {
+                            // Fallback: remove from starred set and array manually
+                            starredSet.delete(keyNormal);
+                            STARRED = STARRED.filter(r => (r.owner.login + '/' + r.name) !== keyNormal);
+                            document.getElementById('starCount').textContent = String(STARRED.length);
+                            renderStars();
+                        }
                         
                         // Update the UI immediately
                         applyFilters();

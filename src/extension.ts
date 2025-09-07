@@ -2842,41 +2842,12 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                 </div>
 
                 <div class="tabs">
-                    <button class="tab active" data-tab="overview">Overview</button>
-                    <button class="tab" data-tab="repositories">Repositories <span class="count" id="repoCount">${repositories.length}</span></button>
+                    <button class="tab active" data-tab="repositories">Repositories <span class="count" id="repoCount">${repositories.length}</span></button>
                     <button class="tab" data-tab="stars">Stars <span class="count" id="starCount">${starredRepos.length}</span></button>
                     <button class="tab" data-tab="activity">Activity</button>
                 </div>
 
-                <section id="overview" class="section active">
-                    <div class="section-title">
-                        <span class="codicon codicon-pin"></span>
-                        Pinned Repositories
-                    </div>
-                    <div class="grid" id="pinnedGrid"></div>
-                    <div class="heatmap">
-                        <div class="heatmap-header">
-                            <div class="heatmap-title">
-                                <span class="codicon codicon-graph"></span>
-                                Contribution Activity
-                            </div>
-                            <div class="heatmap-legend">
-                                <span class="legend-text">Less</span>
-                                <div class="legend-squares">
-                                    <div class="legend-square" style="background: var(--color-canvas-subtle);"></div>
-                                    <div class="legend-square" style="background: #0e4429;"></div>
-                                    <div class="legend-square" style="background: #006d32;"></div>
-                                    <div class="legend-square" style="background: #26a641;"></div>
-                                    <div class="legend-square" style="background: #39d353;"></div>
-                                </div>
-                                <span class="legend-text">More</span>
-                            </div>
-                        </div>
-                        ${heatmapHtml}
-                    </div>
-                </section>
-
-                <section id="repositories" class="section">
+                <section id="repositories" class="section active">
                     <div class="section-title">
                         <span class="codicon codicon-repo"></span>
                         Repositories
@@ -3055,25 +3026,6 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                 ['typeFilter','langFilter','sortBy'].forEach(id => document.getElementById(id).addEventListener('change', applyFilters));
 
                 // Render pinned
-                function renderPinned(){
-                    const container = document.getElementById('pinnedGrid');
-                    container.innerHTML = PINNED.map(r => {
-                        const owner = r.owner?.login || USER_LOGIN;
-                        const lang = r.language;
-                        const langDot = lang ? '<span class="lang-dot" style="background:' + getLangColor(lang) + '"></span>' + lang : '';
-                        return '<div class="card" data-owner="' + owner + '" data-repo="' + r.name + '">' +
-                            '<div class="card-header"><div class="card-title" data-action="open">' + r.name + '</div><span class="badge">' + (r.isPrivate?'Private':'Public') + '</span></div>' +
-                            (r.description?'<div class="desc">' + r.description + '</div>':'') +
-                            '<div class="meta">' +
-                                (lang ? '<div class="meta-item">' + langDot + '</div>' : '') +
-                                '<div class="meta-item">⭐ ' + (r.stargazers?.totalCount||0) + '</div>' +
-                                '<div class="meta-item">🍴 ' + (r.forks?.totalCount||0) + '</div>' +
-                            '</div>' +
-                            '<div class="repo-icon codicon codicon-repo"></div>' +
-                        '</div>';
-                    }).join('');
-                }
-
                 // Render stars
                 function renderStars(){
                     const grid = document.getElementById('starGrid');
@@ -3232,7 +3184,6 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                 });
 
                 // Initial renders
-                renderPinned();
                 applyFilters();
                 renderStars();
             </script>

@@ -2,7 +2,7 @@
   "name": "github-activity-dashboard",
   "displayName": "GitHub Activity Dashboard",
   "description": "A dashboard to track your GitHub activity.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "icon": "logo.png",
   "publisher": "NishantUnavane",
   "engines": {
@@ -40,6 +40,11 @@
           "icon": "resources/icon.svg"
         },
         {
+          "id": "github-profile",
+          "name": "Profile",
+          "icon": "resources/icon.svg"
+        },
+        {
           "id": "github-history",
           "name": "History",
           "icon": "resources/icon.svg"
@@ -52,11 +57,6 @@
         {
           "id": "github-notifications",
           "name": "Notifications",
-          "icon": "resources/icon.svg"
-        },
-        {
-          "id": "github-profile",
-          "name": "Profile",
           "icon": "resources/icon.svg"
         },
         {

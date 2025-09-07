@@ -769,6 +769,12 @@ export function activate(context: vscode.ExtensionContext) {
     const githubProfileProvider = new GitHubProfileProvider();
     vscode.window.registerTreeDataProvider('github-profile', githubProfileProvider);
 
+    // Create tree view for profile to enable revealing
+    const profileTreeView = vscode.window.createTreeView('github-profile', {
+        treeDataProvider: githubProfileProvider
+    });
+    context.subscriptions.push(profileTreeView);
+
     const githubProfileReposProvider = new GitHubProfileReposProvider();
     vscode.window.registerTreeDataProvider('github-profile-repos', githubProfileReposProvider);
 
@@ -780,6 +786,15 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(profileReposTreeView);
 
     console.log('Profile Repositories tree view created:', profileReposTreeView ? 'YES' : 'NO');
+
+    // Automatically reveal the profile section when extension is activated
+    setTimeout(() => {
+        vscode.commands.executeCommand('workbench.view.extension.github-dashboard-container');
+        vscode.commands.executeCommand('github-activity-dashboard.refresh');
+        
+        // Reveal the profile view
+        profileTreeView.reveal(null as any, { select: true, focus: true });
+    }, 1000);
 
     vscode.commands.registerCommand('github-activity-dashboard.refresh', () => {
         githubActivityProvider.refresh();
@@ -1866,23 +1881,6 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     height: 12px;
                     border-radius: 50%;
                 }
-                .language-javascript { background-color: #f1e05a; }
-                .language-typescript { background-color: #3178c6; }
-                .language-python { background-color: #3572A5; }
-                .language-java { background-color: #b07219; }
-                .language-html { background-color: #e34c26; }
-                .language-css { background-color: #563d7c; }
-                .language-c { background-color: #555555; }
-                .language-cpp { background-color: #f34b7d; }
-                .language-csharp { background-color: #239120; }
-                .language-go { background-color: #00ADD8; }
-                .language-rust { background-color: #dea584; }
-                .language-php { background-color: #4F5D95; }
-                .language-ruby { background-color: #701516; }
-                .language-swift { background-color: #fa7343; }
-                .language-kotlin { background-color: #A97BFF; }
-                .language-dart { background-color: #00B4AB; }
-                .language-default { background-color: #586069; }
                 
                 /* Star and Fork Icons */
                 .star-icon, .fork-icon {
@@ -2135,7 +2133,7 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     margin-bottom: 16px;
                     padding-bottom: 8px;
                     border-bottom: 1px solid #21262d;
-                }
+                               }
                 .readme-title {
                     font-size: 16px;
                     font-weight: 600;
@@ -2293,23 +2291,17 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                                 <div class="repo-footer">
                                     ${repo.language ? `
                                         <div class="repo-meta">
-                                            <span class="repo-language-color language-${repo.language.toLowerCase()}"></span>
+                                            <span class="repo-language-color" style="background-color: ${getLanguageColor(repo.language)}"></span>
                                             ${repo.language}
                                         </div>
                                     ` : ''}
                                     <div class="repo-meta">
-                                        <svg class="star-icon" viewBox="0 0 16 16" fill="currentColor">
-                                            <path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/>
-                                        </svg>
-                                        ${repo.stargazers_count}
+                                        ⭐ ${repo.stargazers_count}
                                     </div>
                                     <div class="repo-meta">
-                                        <svg class="fork-icon" viewBox="0 0 16 16" fill="currentColor">
-                                            <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878z"/>
-                                        </svg>
-                                        ${repo.forks_count}
+                                        🍴 ${repo.forks_count}
                                     </div>
-                                    <span class="repo-updated">Updated ${(() => {
+                                    <span>Updated ${(() => {
                                         const date = new Date(repo.updated_at);
                                         const now = new Date();
                                         const diff = now.getTime() - date.getTime();
@@ -2327,202 +2319,24 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     </div>
                 </div>
 
-                <!-- Organizations Section -->
-                ${organizations.length > 0 ? `
-                <div class="orgs-section">
-                    <div class="orgs-header">
-                        <h2 class="orgs-title">Organizations</h2>
-                        <span class="orgs-count">${organizations.length}</span>
-                    </div>
-                    
-                    <div class="orgs-grid">
-                        ${organizations.map(org => `
-                            <div class="org-card" onclick="openOrganization('${org.login}')">
-                                <img src="${org.avatar_url}" alt="${org.login}" class="org-avatar">
-                                <div class="org-info">
-                                    <h4>${org.login}</h4>
-                                    <p>${org.description || 'No description'}</p>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-                ` : ''}
-
-                <!-- Pinned Repositories Section -->
-                ${pinnedRepos.length > 0 ? `
-                <div class="pinned-section">
-                    <div class="pinned-header">
-                        <h2 class="pinned-title">Pinned Repositories</h2>
-                    </div>
-                    
-                    <div class="pinned-grid">
-                        ${pinnedRepos.map(repo => `
-                            <div class="pinned-card" onclick="openRepository('${repo.url}', '${repo.name}')">
-                                <div class="pinned-header-row">
-                                    <h3 class="pinned-name">${repo.name}</h3>
-                                    <span class="pinned-visibility ${repo.isPrivate ? 'private' : 'public'}">
-                                        ${repo.isPrivate ? 'Private' : 'Public'}
-                                    </span>
-                                </div>
-                                ${repo.description ? `<p class="pinned-description">${repo.description}</p>` : ''}
-                                <div class="pinned-footer">
-                                    ${repo.primaryLanguage ? `
-                                        <div class="repo-meta">
-                                            <span class="repo-language-color" style="background-color: ${repo.primaryLanguage.color}"></span>
-                                            ${repo.primaryLanguage.name}
-                                        </div>
-                                    ` : ''}
-                                    <div class="repo-meta">
-                                        <svg class="star-icon" viewBox="0 0 16 16" fill="currentColor">
-                                            <path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/>
-                                        </svg>
-                                        ${repo.stargazers.totalCount}
-                                    </div>
-                                    <div class="repo-meta">
-                                        <svg class="fork-icon" viewBox="0 0 16 16" fill="currentColor">
-                                            <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878z"/>
-                                        </svg>
-                                        ${repo.forks.totalCount}
-                                    </div>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-                ` : ''}
-
-                <!-- Recent Activity Section -->
-                ${recentEvents.length > 0 ? `
-                <div class="activity-section">
-                    <div class="activity-header">
-                        <h2 class="activity-title">Recent Activity</h2>
-                    </div>
-                    
-                    <div class="activity-list">
-                        ${recentEvents.slice(0, 10).map(event => {
-                            const eventTime = new Date(event.created_at);
-                            const timeAgo = getTimeAgo(eventTime);
-                            
-                            let icon = 'git-commit';
-                            let action = '';
-                            
-                            switch (event.type) {
-                                case 'PushEvent':
-                                    icon = 'git-commit';
-                                    action = `Pushed ${event.payload.commits?.length || 0} commit(s) to`;
-                                    break;
-                                case 'PullRequestEvent':
-                                    icon = 'git-pull-request';
-                                    action = `${event.payload.action} a pull request in`;
-                                    break;
-                                case 'IssuesEvent':
-                                    icon = 'issues';
-                                    action = `${event.payload.action} an issue in`;
-                                    break;
-                                case 'CreateEvent':
-                                    icon = 'add';
-                                    action = `Created ${event.payload.ref_type} in`;
-                                    break;
-                                case 'DeleteEvent':
-                                    icon = 'trash';
-                                    action = `Deleted ${event.payload.ref_type} in`;
-                                    break;
-                                case 'ForkEvent':
-                                    icon = 'repo-forked';
-                                    action = `Forked`;
-                                    break;
-                                case 'WatchEvent':
-                                    icon = 'star';
-                                    action = `Starred`;
-                                    break;
-                                default:
-                                    icon = 'circle';
-                                    action = `${event.type.replace('Event', '').toLowerCase()} in`;
-                            }
-                            
-                            return `
-                                <div class="activity-item" onclick="openEvent('${event.repo.url.replace('api.github.com/repos', 'github.com')}')">
-                                    <svg class="activity-icon" viewBox="0 0 16 16" fill="currentColor">
-                                        <path d="${getActivityIconPath(icon)}"/>
-                                    </svg>
-                                    <div class="activity-content">
-                                        <span>${action}</span>
-                                        <span class="activity-repo">${event.repo.name}</span>
-                                    </div>
-                                    <span class="activity-time">${timeAgo}</span>
-                                </div>
-                            `;
-                        }).join('')}
-                    </div>
-                </div>
-                ` : ''}
-
-                <!-- Languages Section -->
-                ${topLanguages.length > 0 ? `
-                <div class="languages-section">
-                    <div class="languages-header">
-                        <h2 class="languages-title">Most Used Languages</h2>
-                    </div>
-                    
-                    <div class="languages-list">
-                        ${topLanguages.map(([lang, count]) => `
-                            <div class="language-item">
-                                <span class="language-color" style="background-color: ${getLanguageColor(lang)}"></span>
-                                <span>${lang}</span>
-                                <span>${count}</span>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-                ` : ''}
-
-                <!-- Profile README Section -->
-                ${profileReadme ? `
-                <div class="readme-section">
-                    <div class="readme-header">
-                        <h2 class="readme-title">README</h2>
-                    </div>
-                    
-                    <div class="readme-content">
-                        ${marked(profileReadme)}
-                    </div>
-                </div>
-                ` : ''}
-
-                <!-- Footer -->
-                <div class="profile-footer">
+                <div class="user-footer">
                     <a href="#" class="github-link" onclick="openProfile('${userData.login}')">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                             <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
-                                        </svg>
+                        </svg>
                         View Profile in VS Code
-                                    </a>
-                                </div>
-                            </div>
+                    </a>
+                </div>
+            </div>
 
             <script nonce="${nonce}">
                 const vscode = acquireVsCodeApi();
-                
+
                 function openRepository(repoUrl, repoName) {
                     vscode.postMessage({
                         command: 'openRepo',
                         repoUrl: repoUrl,
                         repoName: repoName
-                    });
-                }
-                
-                function openOrganization(orgName) {
-                    vscode.postMessage({
-                        command: 'openOrg',
-                        orgName: orgName
-                    });
-                }
-                
-                function openEvent(eventUrl) {
-                    vscode.postMessage({
-                        command: 'openEvent',
-                        eventUrl: eventUrl
                     });
                 }
 
@@ -2537,133 +2351,6 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
         </html>
     `;
 }
-
-function getLanguageId(extension: string): string {
-    const languageMap: { [key: string]: string } = {
-        'js': 'javascript',
-        'ts': 'typescript',
-        'jsx': 'javascriptreact',
-        'tsx': 'typescriptreact',
-        'py': 'python',
-        'java': 'java',
-        'cpp': 'cpp',
-        'c': 'c',
-        'cs': 'csharp',
-        'php': 'php',
-        'rb': 'ruby',
-        'go': 'go',
-        'rs': 'rust',
-        'swift': 'swift',
-        'kt': 'kotlin',
-        'scala': 'scala',
-        'sh': 'shellscript',
-        'ps1': 'powershell',
-        'sql': 'sql',
-        'html': 'html',
-        'css': 'css',
-        'scss': 'scss',
-        'sass': 'sass',
-        'less': 'less',
-        'json': 'json',
-        'xml': 'xml',
-        'yaml': 'yaml',
-        'yml': 'yaml',
-        'md': 'markdown',
-        'txt': 'plaintext'
-    };
-    return languageMap[extension.toLowerCase()] || 'plaintext';
-}
-
-// Generate a nonce for Content Security Policy
-function getNonce(): string {
-    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let text = '';
-    for (let i = 0; i < 32; i++) {
-        text += possible.charAt(Math.floor(Math.random() * possible.length));
-    }
-    return text;
-}
-
-// Helper function to format time ago
-function getTimeAgo(date: Date): string {
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / (1000 * 60));
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    
-    if (minutes < 1) return 'now';
-    if (minutes < 60) return `${minutes}m`;
-    if (hours < 24) return `${hours}h`;
-    if (days < 30) return `${days}d`;
-    if (days < 365) return `${Math.floor(days / 30)}mo`;
-    return `${Math.floor(days / 365)}y`;
-}
-
-// Helper function to get activity icon paths
-function getActivityIconPath(icon: string): string {
-    const iconPaths: { [key: string]: string } = {
-        'git-commit': 'M10.5 7.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM8.75 7.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM10.5 9.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM8.75 9.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM10.5 11.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM8.75 11.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM10.5 13.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM8.75 13.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM2.5 2.75a.75.75 0 00-1.5 0v10.5a.75.75 0 001.5 0V2.75z',
-        'git-pull-request': 'M1.5 3.25a2.25 2.25 0 113 2.122v5.256a2.251 2.251 0 11-1.5 0V5.372A2.25 2.25 0 011.5 3.25zm5.677-.177L9.573.677A.25.25 0 0110 .854V2.5h1A2.5 2.5 0 0113.5 5v5.628a2.251 2.251 0 101.5 0V5a4 4 0 00-4-4h-1V.854a.25.25 0 01.43-.177L7.177 3.073a.25.25 0 010 .354zM3.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm0 9.5a.75.75 0 100 1.5.75.75 0 000-1.5zm8.25.75a.75.75 0 100 1.5.75.75 0 000-1.5z',
-        'issues': 'M8 9.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM1.5 1.75a.25.25 0 01.25-.25h8.5a.25.25 0 01.25.25v5.5a.25.25 0 01-.25.25h-3.5a.75.75 0 00-.53.22L3.5 11.44V9.25a.75.75 0 00-.75-.75h-1a.25.25 0 01-.25-.25v-5.5zM1.75 1h8.5v5.5h-2.75V9.25c0 .138.112.25.25.25h1.25l2.5 2.5v-2.5h.75v-5.5a1.75 1.75 0 00-1.75-1.75h-8.5A1.75 1.75 0 000 1.75v5.5C0 8.216.784 9 1.75 9H2.5v2.5l2.5-2.5H7.25a.25.25 0 00.25-.25V6.75h2.75V1.75z',
-        'add': 'M7.75 2a.75.75 0 01.75.75V7h4.25a.75.75 0 110 1.5H8.5v4.25a.75.75 0 11-1.5 0V8.5H2.75a.75.75 0 010-1.5H7V2.75A.75.75 0 017.75 2z',
-        'trash': 'M11 1.75a.25.25 0 01.25-.25h2.5a.25.25 0 01.25.25v.5a.25.25 0 01-.25.25h-.5v8.5a1.75 1.75 0 01-1.75 1.75h-7a1.75 1.75 0 01-1.75-1.75v-8.5h-.5a.25.25 0 01-.25-.25v-.5a.25.25 0 01.25-.25h2.5a.25.25 0 01.25.25v-.5A1.75 1.75 0 015.25 0h3.5A1.75 1.75 0 0110 1.75v.5a.25.25 0 01-.25.25h-.5zM4.5 2.75v8.5a.25.25 0 00.25.25h4.5a.25.25 0 00.25-.25v-8.5a.25.25 0 00-.25-.25h-4.5a.25.25 0 00-.25.25zM6.25 3.5v6a.25.25 0 01-.5 0v-6a.25.25 0 01.5 0zm1.5 0v6a.25.25 0 01-.5 0v-6a.25.25 0 01.5 0z',
-        'repo-forked': 'M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm-1.75 7.378a.75.75 0 100 1.5.75.75 0 000-1.5zm3-8.75a.75.75 0 100 1.5.75.75 0 000-1.5z',
-        'star': 'M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z',
-        'circle': 'M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1112 0A6 6 0 012 8z'
-    };
-    return iconPaths[icon] || iconPaths['circle'];
-}
-
-// Helper function to get language colors
-function getLanguageColor(language: string): string {
-    const colors: { [key: string]: string } = {
-        'JavaScript': '#f1e05a',
-        'TypeScript': '#3178c6',
-        'Python': '#3572A5',
-        'Java': '#b07219',
-        'HTML': '#e34c26',
-        'CSS': '#563d7c',
-        'C': '#555555',
-        'C++': '#f34b7d',
-        'C#': '#239120',
-        'Go': '#00ADD8',
-        'Rust': '#dea584',
-        'PHP': '#4F5D95',
-        'Ruby': '#701516',
-        'Swift': '#fa7343',
-        'Kotlin': '#A97BFF',
-        'Dart': '#00B4AB',
-        'Scala': '#c22d40',
-        'R': '#198CE7',
-        'Shell': '#89e051',
-        'PowerShell': '#012456',
-        'Vue': '#4FC08D',
-        'React': '#61DAFB'
-    };
-    return colors[language] || '#586069';
-}
-
-// Simple markdown parser for README
-function marked(text: string): string {
-    if (!text) return '';
-    
-    // Basic markdown parsing
-    return text
-        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-        .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
-        .replace(/\*(.*)\*/gim, '<em>$1</em>')
-        .replace(/`([^`]+)`/gim, '<code>$1</code>')
-        .replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>')
-        .replace(/\n\n/gim, '</p><p>')
-        .replace(/\n/gim, '<br>')
-        .replace(/^/, '<p>')
-        .replace(/$/, '</p>');
-}
-
-export function deactivate() {}
 
 function getOrganizationWebviewContent(webview: vscode.Webview, orgData: any, repositories: any[] = []): string {
     const nonce = getNonce();
@@ -2744,7 +2431,7 @@ function getOrganizationWebviewContent(webview: vscode.Webview, orgData: any, re
                     font-weight: 600;
                     color: #f0f6fc;
                 }
-
+                
                 .repos-section {
                     margin-top: 32px;
                 }
@@ -2770,7 +2457,6 @@ function getOrganizationWebviewContent(webview: vscode.Webview, orgData: any, re
                     border-radius: 2em;
                     line-height: 18px;
                 }
-
                 .repos-grid {
                     display: grid;
                     grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
@@ -2801,6 +2487,9 @@ function getOrganizationWebviewContent(webview: vscode.Webview, orgData: any, re
                     margin: 0;
                     line-height: 1.25;
                 }
+                .repo-name:hover {
+                    text-decoration: underline;
+                }
                 .repo-visibility {
                     font-size: 12px;
                     font-weight: 500;
@@ -2810,6 +2499,13 @@ function getOrganizationWebviewContent(webview: vscode.Webview, orgData: any, re
                     color: #7d8590;
                     line-height: 18px;
                     margin-left: 8px;
+                }
+                .repo-visibility.public {
+                    color: #7d8590;
+                }
+                .repo-visibility.private {
+                    color: #f85149;
+                    border-color: #f85149;
                 }
                 .repo-description {
                     font-size: 12px;
@@ -2917,7 +2613,7 @@ function getOrganizationWebviewContent(webview: vscode.Webview, orgData: any, re
                                         const now = new Date();
                                         const diff = now.getTime() - date.getTime();
                                         const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
+                                        
                                         if (days === 0) return 'today';
                                         if (days === 1) return 'yesterday';
                                         if (days < 30) return days + ' days ago';
@@ -3099,6 +2795,9 @@ function getUserProfileWebviewContent(webview: vscode.Webview, userData: any, re
                     margin: 0;
                     line-height: 1.25;
                 }
+                .repo-name:hover {
+                    text-decoration: underline;
+                }
                 .repo-visibility {
                     font-size: 12px;
                     font-weight: 500;
@@ -3108,6 +2807,13 @@ function getUserProfileWebviewContent(webview: vscode.Webview, userData: any, re
                     color: #7d8590;
                     line-height: 18px;
                     margin-left: 8px;
+                }
+                .repo-visibility.public {
+                    color: #7d8590;
+                }
+                .repo-visibility.private {
+                    color: #f85149;
+                    border-color: #f85149;
                 }
                 .repo-description {
                     font-size: 12px;
@@ -3215,7 +2921,7 @@ function getUserProfileWebviewContent(webview: vscode.Webview, userData: any, re
                                         const now = new Date();
                                         const diff = now.getTime() - date.getTime();
                                         const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
+                                        
                                         if (days === 0) return 'today';
                                         if (days === 1) return 'yesterday';
                                         if (days < 30) return days + ' days ago';
@@ -3259,4 +2965,132 @@ function getUserProfileWebviewContent(webview: vscode.Webview, userData: any, re
         </body>
         </html>
     `;
+}
+
+// Helper function to format time ago
+function getTimeAgo(date: Date): string {
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / (1000 * 60));
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    
+    if (minutes < 1) return 'now';
+    if (minutes < 60) return `${minutes}m`;
+    if (hours < 24) return `${hours}h`;
+    if (days < 30) return `${days}d`;
+    if (days < 365) return `${Math.floor(days / 30)}mo`;
+    return `${Math.floor(days / 365)}y`;
+}
+
+// Helper function to get activity icon paths
+function getActivityIconPath(icon: string): string {
+    const iconPaths: { [key: string]: string } = {
+        'git-commit': 'M10.5 7.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM8.75 7.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM10.5 9.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM8.75 9.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM10.5 11.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM8.75 11.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM10.5 13.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM8.75 13.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM2.5 2.75a.75.75 0 00-1.5 0v10.5a.75.75 0 001.5 0V2.75z',
+        'git-pull-request': 'M1.5 3.25a2.25 2.25 0 113 2.122v5.256a2.251 2.251 0 11-1.5 0V5.372A2.25 2.25 0 011.5 3.25zm5.677-.177L9.573.677A.25.25 0 0110 .854V2.5h1A2.5 2.5 0 0113.5 5v5.628a2.251 2.251 0 101.5 0V5a4 4 0 00-4-4h-1V.854a.25.25 0 01.43-.177L7.177 3.073a.25.25 0 010 .354zM3.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm0 9.5a.75.75 0 100 1.5.75.75 0 000-1.5zm8.25.75a.75.75 0 100 1.5.75.75 0 000-1.5z',
+        'issues': 'M8 9.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM1.5 1.75a.25.25 0 01.25-.25h8.5a.25.25 0 01.25.25v5.5a.25.25 0 01-.25.25h-3.5a.75.75 0 00-.53.22L3.5 11.44V9.25a.75.75 0 00-.75-.75h-1a.25.25 0 01-.25-.25v-5.5zM1.75 1h8.5v5.5h-2.75V9.25c0 .138.112.25.25.25h1.25l2.5 2.5v-2.5h.75v-5.5a1.75 1.75 0 00-1.75-1.75h-8.5A1.75 1.75 0 000 1.75v5.5C0 8.216.784 9 1.75 9H2.5v2.5l2.5-2.5H7.25a.25.25 0 00.25-.25V6.75h2.75V1.75z',
+        'add': 'M7.75 2a.75.75 0 01.75.75V7h4.25a.75.75 0 110 1.5H8.5v4.25a.75.75 0 11-1.5 0V8.5H2.75a.75.75 0 010-1.5H7V2.75A.75.75 0 017.75 2z',
+        'trash': 'M11 1.75a.25.25 0 01.25-.25h2.5a.25.25 0 01.25.25v.5a.25.25 0 01-.25.25h-.5v8.5a1.75 1.75 0 01-1.75 1.75h-7a1.75 1.75 0 01-1.75-1.75v-8.5h-.5a.25.25 0 01-.25-.25v-.5a.25.25 0 01.25-.25h2.5a.25.25 0 01.25.25v-.5A1.75 1.75 0 015.25 0h3.5A1.75 1.75 0 0110 1.75v.5a.25.25 0 01-.25.25h-.5zM4.5 2.75v8.5a.25.25 0 00.25.25h4.5a.25.25 0 00.25-.25v-8.5a.25.25 0 00-.25-.25h-4.5a.25.25 0 00-.25.25zM6.25 3.5v6a.25.25 0 01-.5 0v-6a.25.25 0 01.5 0zm1.5 0v6a.25.25 0 01-.5 0v-6a.25.25 0 01.5 0z',
+        'repo-forked': 'M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm-1.75 7.378a.75.75 0 100 1.5.75.75 0 000-1.5zm3-8.75a.75.75 0 100 1.5.75.75 0 000-1.5z',
+        'star': 'M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z',
+        'circle': 'M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1112 0A6 6 0 012 8z'
+    };
+    return iconPaths[icon] || iconPaths['circle'];
+}
+
+// Helper function to get language colors
+function getLanguageColor(language: string): string {
+    const colors: { [key: string]: string } = {
+        'JavaScript': '#f1e05a',
+        'TypeScript': '#3178c6',
+        'Python': '#3572A5',
+        'Java': '#b07219',
+        'HTML': '#e34c26',
+        'CSS': '#563d7c',
+        'C': '#555555',
+        'C++': '#f34b7d',
+        'C#': '#239120',
+        'Go': '#00ADD8',
+        'Rust': '#dea584',
+        'PHP': '#4F5D95',
+        'Ruby': '#701516',
+        'Swift': '#fa7343',
+        'Kotlin': '#A97BFF',
+        'Dart': '#00B4AB',
+        'Scala': '#c22d40',
+        'R': '#198CE7',
+        'Shell': '#89e051',
+        'PowerShell': '#012456',
+        'Vue': '#4FC08D',
+        'React': '#61DAFB'
+    };
+    return colors[language] || '#586069';
+}
+
+// Simple markdown parser for README
+function marked(text: string): string {
+    if (!text) return '';
+    
+    // Basic markdown parsing
+    return text
+        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+        .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
+        .replace(/\*(.*)\*/gim, '<em>$1</em>')
+        .replace(/`([^`]+)`/gim, '<code>$1</code>')
+        .replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>')
+        .replace(/\n\n/gim, '</p><p>')
+        .replace(/\n/gim, '<br>')
+        .replace(/^/, '<p>')
+        .replace(/$/, '</p>');
+}
+
+export function deactivate() {}
+
+// Helper functions
+function getLanguageId(extension: string): string {
+    const languageMap: { [key: string]: string } = {
+        'js': 'javascript',
+        'ts': 'typescript',
+        'jsx': 'javascriptreact',
+        'tsx': 'typescriptreact',
+        'py': 'python',
+        'java': 'java',
+        'cpp': 'cpp',
+        'c': 'c',
+        'cs': 'csharp',
+        'php': 'php',
+        'rb': 'ruby',
+        'go': 'go',
+        'rs': 'rust',
+        'swift': 'swift',
+        'kt': 'kotlin',
+        'scala': 'scala',
+        'sh': 'shellscript',
+        'ps1': 'powershell',
+        'sql': 'sql',
+        'html': 'html',
+        'css': 'css',
+        'scss': 'scss',
+        'sass': 'sass',
+        'less': 'less',
+        'json': 'json',
+        'xml': 'xml',
+        'yaml': 'yaml',
+        'yml': 'yaml',
+        'md': 'markdown',
+        'txt': 'plaintext'
+    };
+    return languageMap[extension.toLowerCase()] || 'plaintext';
+}
+
+// Generate a nonce for Content Security Policy
+function getNonce(): string {
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let text = '';
+    for (let i = 0; i < 32; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
 }

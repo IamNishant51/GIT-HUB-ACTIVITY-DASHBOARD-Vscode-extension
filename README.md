@@ -1,4 +1,4 @@
-# GitHub Activity Dashboard
+GitHub Activity Dashboard
 
 A VS Code extension that shows your GitHub activity, repositories, history, stars, notifications, and a profile view inside the editor.
 

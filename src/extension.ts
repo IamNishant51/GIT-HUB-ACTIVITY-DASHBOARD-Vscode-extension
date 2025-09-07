@@ -3,6 +3,9 @@ import { Octokit } from '@octokit/rest';
 import simpleGit from 'simple-git';
 import { getCreateRepoWebviewContent, getRepoExplorerWebviewContent } from './createRepo';
 
+// Global variable to track active profile panel
+let activeProfilePanel: vscode.WebviewPanel | undefined;
+
 class GitHubActivityProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<vscode.TreeItem | undefined | null | void> = new vscode.EventEmitter<vscode.TreeItem | undefined | null | void>();
     readonly onDidChangeTreeData: vscode.Event<vscode.TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
@@ -735,6 +738,30 @@ export function activate(context: vscode.ExtensionContext) {
                         });
                         vscode.window.showInformationMessage(`Successfully created repository "${message.repoName}"`);
                         
+                        // Fetch updated repositories list for profile webview
+                        try {
+                            const reposResponse = await octokit.repos.listForAuthenticatedUser({
+                                sort: 'updated',
+                                per_page: 100
+                            });
+                            
+                            // Send update to any open profile webviews
+                            const profilePanels = vscode.window.visibleTextEditors.filter(editor => 
+                                editor.document.uri.scheme === 'vscode-webview'
+                            );
+                            
+                            // Find and update profile webviews (we'll need to track them)
+                            // For now, we'll use a global variable to track the main profile panel
+                            if (activeProfilePanel) {
+                                activeProfilePanel.webview.postMessage({
+                                    command: 'repoCreated',
+                                    repositories: reposResponse.data
+                                });
+                            }
+                        } catch (error) {
+                            console.error('Error fetching updated repositories after creation:', error);
+                        }
+                        
                         // Refresh the providers
                         githubRepoProvider.refresh();
                         githubProfileReposProvider.refresh();
@@ -1045,6 +1072,14 @@ export function activate(context: vscode.ExtensionContext) {
             enableScripts: true
                 }
             );
+
+            // Set as active profile panel
+            activeProfilePanel = panel;
+            
+            // Handle panel disposal
+            panel.onDidDispose(() => {
+                activeProfilePanel = undefined;
+            });
 
             // Fetch starred repositories
             let starredRepos: any[] = [];
@@ -2893,6 +2928,7 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
             <script nonce="${nonce}">
                 const vscode = acquireVsCodeApi();
                 const USER_LOGIN = ${JSON.stringify(userData.login)};
+                const CURRENT_USER = ${JSON.stringify({ login: userData.login, id: userData.id })};
                 let REPOS = ${reposJson};
                 let STARRED = ${starredJson};
                 const PINNED = ${pinnedJson};
@@ -3028,6 +3064,11 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                         const name = repo.name;
                         const lang = repo.language;
                         const langDot = lang ? '<span class="lang-dot" style="background:' + getLangColor(lang) + '"></span>' + lang : '';
+                        
+                        // Check if current user owns this repository (assuming CURRENT_USER is available)
+                        const isOwned = CURRENT_USER && owner === CURRENT_USER.login;
+                        const deleteBtn = isOwned ? deleteButton(owner, name) : '';
+                        
                         return '<div class="card" data-owner="' + owner + '" data-repo="' + name + '">' +
                                '  <div class="card-header">' +
                                '    <div class="card-title" data-action="open">' + owner + '/' + name + '</div>' +
@@ -3042,7 +3083,7 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                                '  <div class="card-footer">' +
                                '    <div class="updated-text">Updated ' + fmtUpdated(repo.updated_at || new Date().toISOString()) + '</div>' +
                                '    <div class="card-actions">' +
-                               '      ' + starButton(owner,name) +
+                               '      ' + starButton(owner,name) + deleteBtn +
                                '    </div>' +
                                '  </div>' +
                                '  <div class="repo-icon codicon codicon-repo"></div>' +
@@ -3148,6 +3189,27 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                                 btn.style.opacity = '1';
                             }
                         });
+                    }
+                    if (msg.command === 'repoCreated') {
+                        // Update repositories list with newly created repo
+                        if (msg.repositories) {
+                            REPOS = msg.repositories;
+                            document.getElementById('repoCount').textContent = String(REPOS.length);
+                            applyFilters(); // This will re-render the repositories
+                            
+                            // Show success notification
+                            const notification = document.createElement('div');
+                            notification.className = 'success-notification';
+                            notification.textContent = 'Repository created successfully!';
+                            notification.style.cssText = 'position: fixed; top: 20px; right: 20px; background: var(--vscode-notificationsInfoIcon-foreground); color: var(--vscode-editor-background); padding: 12px 16px; border-radius: 4px; font-size: 12px; z-index: 1000; animation: slideIn 0.3s ease;';
+                            document.body.appendChild(notification);
+                            
+                            setTimeout(() => {
+                                if (notification.parentNode) {
+                                    notification.remove();
+                                }
+                            }, 3000);
+                        }
                     }
                 });
 

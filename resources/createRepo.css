@@ -1,76 +1,85 @@
-.codicon {
-    font-family: 'codicon';
-    font-style: normal;
-    font-weight: normal;
-    font-variant: normal;
-    text-transform: none;
-    line-height: 1;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-}
-
-.codicon-spin:before {
-    animation: codicon-spin 1.5s linear infinite;
-}
-
-@keyframes codicon-spin {
-    100% {
-        transform: rotate(360deg);
-    }
-}
-
+/* GitHub Create Repository Page Styles */
 body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
-    background-color: var(--vscode-editor-background);
-    color: var(--vscode-editor-foreground);
-    padding: 20px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+    background: #0d1117;
+    color: #f0f6fc;
+    margin: 0;
+    padding: 0;
+    line-height: 1.5;
+}
+
+.github-create-repo-bg {
+    min-height: 100vh;
+    background: #0d1117;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
 }
 
 .container {
-    max-width: 600px;
-    margin: 0 auto;
+    max-width: 768px;
+    width: 100%;
+}
+
+.github-create-repo {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 48px;
+    box-shadow: 0 8px 24px rgba(1, 4, 9, 0.75);
 }
 
 .header {
-    display: flex;
-    align-items: center;
-    margin-bottom: 8px;
+    text-align: center;
+    margin-bottom: 32px;
 }
 
 .header .codicon {
-    font-size: 32px;
-    margin-right: 12px;
+    font-size: 48px;
+    color: #f78166;
+    margin-bottom: 16px;
+    display: block;
 }
 
 h1 {
-    font-size: 24px;
+    font-size: 32px;
     font-weight: 600;
+    color: #f0f6fc;
     margin-bottom: 8px;
+    letter-spacing: -0.025em;
 }
 
-p {
-    font-size: 14px;
-    color: var(--vscode-description-foreground);
-    margin-bottom: 24px;
+.github-create-repo-desc {
+    font-size: 16px;
+    color: #8b949e;
+    margin-bottom: 32px;
+    text-align: center;
 }
 
-a {
-    color: var(--vscode-textLink-foreground);
-    text-decoration: none;
-}
-
-a:hover {
-    text-decoration: underline;
+.github-create-repo-form {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
 }
 
 .form-group {
-    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 label {
-    display: block;
+    font-size: 14px;
     font-weight: 600;
-    margin-bottom: 8px;
+    color: #f0f6fc;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.required {
+    color: #f85149;
 }
 
 .input-with-icon {
@@ -79,36 +88,40 @@ label {
 
 .input-with-icon .codicon {
     position: absolute;
+    left: 16px;
     top: 50%;
-    left: 10px;
     transform: translateY(-50%);
-    color: var(--vscode-description-foreground);
+    color: #8b949e;
+    font-size: 16px;
 }
 
 input[type="text"] {
     width: 100%;
-    padding: 8px;
-    padding-left: 30px;
-    border: 1px solid var(--vscode-input-border);
-    background-color: var(--vscode-input-background);
-    color: var(--vscode-input-foreground);
+    padding: 12px 16px 12px 44px;
+    background: #0d1117;
+    border: 1px solid #30363d;
     border-radius: 6px;
+    color: #f0f6fc;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
     box-sizing: border-box;
+}
+
+input[type="text"]:focus {
+    outline: none;
+    border-color: #58a6ff;
+    box-shadow: 0 0 0 3px rgba(56, 166, 255, 0.2);
 }
 
 .description {
     font-size: 12px;
-    color: var(--vscode-description-foreground);
+    color: #8b949e;
     margin-top: 4px;
-    margin-bottom: 0;
-}
-
-.required {
-    color: var(--vscode-error-foreground);
 }
 
 .visibility-group {
-    border: 1px solid var(--vscode-input-border);
+    background: #0d1117;
+    border: 1px solid #30363d;
     border-radius: 6px;
     padding: 16px;
 }
@@ -116,229 +129,153 @@ input[type="text"] {
 .radio-option {
     display: flex;
     align-items: flex-start;
-    margin-bottom: 12px;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 6px;
+    transition: background-color 0.2s ease;
 }
 
-.radio-option:last-child {
-    margin-bottom: 0;
+.radio-option:hover {
+    background: #21262d;
 }
 
 .radio-option .codicon {
-    margin-right: 8px;
+    color: #8b949e;
+    font-size: 20px;
     margin-top: 2px;
+    flex-shrink: 0;
 }
 
 input[type="radio"] {
-    margin-top: 4px;
-    margin-right: 8px;
+    margin: 0;
+    width: 16px;
+    height: 16px;
+    accent-color: #58a6ff;
+}
+
+.radio-option label {
+    flex: 1;
+    cursor: pointer;
+}
+
+.radio-option strong {
+    color: #f0f6fc;
+    font-weight: 600;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.radio-option .description {
+    color: #8b949e;
+    font-size: 12px;
+    margin: 0;
+    line-height: 1.4;
 }
 
 .checkbox-option {
-    margin-top: 8px;
-}
-
-button {
-    background-color: var(--vscode-button-background);
-    color: var(--vscode-button-foreground);
-    padding: 10px 16px;
-    border: 1px solid var(--vscode-button-border, transparent);
-    border-radius: 6px;
-    font-weight: 600;
-    cursor: pointer;
-    margin-top: 16px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-button:hover {
-    background-color: var(--vscode-button-hover-background);
-}
-
-button:disabled {
-    background-color: var(--vscode-button-secondary-background);
-    color: var(--vscode-button-secondary-foreground);
-    cursor: not-allowed;
-}
-
-.error-message {
-    color: var(--vscode-error-foreground);
-    margin-top: 10px;
-}
-
-.github-create-repo-bg {
-    background: var(--vscode-editor-background);
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-}
-
-.github-create-repo-bg::before,
-.github-create-repo-bg::after,
-.github-create-repo::before {
-    display: none;
-}
-
-.github-create-repo {
-    background: var(--vscode-editor-background);
-    border: 1px solid var(--vscode-panel-border);
-    border-radius: 6px;
-    box-shadow: 0 1px 4px var(--vscode-widget-shadow, rgba(27,31,35,0.04));
-    padding: 40px 32px;
-    max-width: 480px;
-    width: 100%;
-    position: relative;
-    overflow: hidden;
-    z-index: 1;
-}
-
-.github-create-repo .header {
-    display: flex;
-    align-items: center;
-    margin-bottom: 18px;
-}
-
-.github-create-repo .header .codicon {
-    font-size: 40px;
-    margin-right: 16px;
-    color: var(--vscode-icon-foreground, var(--vscode-editor-foreground));
-}
-
-.github-create-repo h1 {
-    font-size: 24px;
-    font-weight: 600;
-    color: var(--vscode-editor-foreground);
-    margin-bottom: 0;
-    letter-spacing: 0.2px;
-}
-
-.github-create-repo-desc {
-    font-size: 15px;
-    color: var(--vscode-description-foreground);
-    margin-bottom: 24px;
-}
-
-.github-create-repo-form {
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-}
-
-.github-create-repo-form .form-group {
-    margin-bottom: 0;
-}
-
-.github-create-repo-form label {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--vscode-editor-foreground);
-    margin-bottom: 6px;
-}
-
-.github-create-repo-form input[type="text"] {
-    background: var(--vscode-input-background);
-    border: 1px solid var(--vscode-input-border);
-    color: var(--vscode-input-foreground);
-    font-size: 14px;
-    border-radius: 6px;
-    padding: 8px 12px 8px 36px;
-    margin-bottom: 0;
-    box-shadow: none;
-    transition: border 0.2s;
-}
-
-.github-create-repo-form input[type="text"]:focus {
-    border-color: var(--vscode-focusBorder);
-    outline: none;
-}
-
-.github-create-repo-form .input-with-icon .codicon {
-    position: absolute;
-    top: 50%;
-    left: 10px;
-    transform: translateY(-50%);
-    color: var(--vscode-description-foreground);
-    font-size: 16px;
-}
-
-.github-create-repo-form .description {
-    font-size: 12px;
-    color: var(--vscode-description-foreground);
-    margin-top: 2px;
-}
-
-.github-create-repo-form .required {
-    color: var(--vscode-errorForeground);
-}
-
-.github-create-repo-form .visibility-group {
-    background: var(--vscode-input-background);
-    border: 1px solid var(--vscode-input-border);
-    border-radius: 6px;
-    padding: 16px;
-}
-
-.github-create-repo-form .radio-option {
     display: flex;
     align-items: flex-start;
-    margin-bottom: 10px;
+    gap: 12px;
+    padding: 12px;
+    background: #21262d;
+    border-radius: 6px;
 }
 
-.github-create-repo-form .radio-option:last-child {
-    margin-bottom: 0;
+.checkbox-option input[type="checkbox"] {
+    margin: 0;
+    width: 16px;
+    height: 16px;
+    accent-color: #58a6ff;
 }
 
-.github-create-repo-form .radio-option .codicon {
-    margin-right: 8px;
-    margin-top: 2px;
-    color: var(--vscode-description-foreground);
-    font-size: 16px;
+.checkbox-option label {
+    flex: 1;
+    cursor: pointer;
+    font-size: 14px;
+    color: #f0f6fc;
 }
 
-.github-create-repo-form input[type="radio"] {
+.checkbox-option .description {
+    color: #8b949e;
+    font-size: 12px;
     margin-top: 4px;
-    margin-right: 8px;
-}
-
-.github-create-repo-form .checkbox-option {
-    margin-top: 8px;
+    line-height: 1.4;
 }
 
 .github-create-repo-btn {
-    background: var(--vscode-button-background);
-    color: var(--vscode-button-foreground);
-    border: none;
+    background: #238636;
+    color: #ffffff;
+    border: 1px solid #238636;
     border-radius: 6px;
+    padding: 12px 16px;
+    font-size: 14px;
     font-weight: 600;
-    font-size: 16px;
-    padding: 10px 0;
-    margin-top: 18px;
+    cursor: pointer;
+    transition: all 0.2s ease;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    cursor: pointer;
-    box-shadow: 0 1px 4px var(--vscode-widget-shadow, rgba(27,31,35,0.04));
-    transition: background 0.2s;
-    letter-spacing: 0.2px;
+    margin-top: 8px;
 }
 
-.github-create-repo-btn:hover {
-    background: var(--vscode-button-hoverBackground);
+.github-create-repo-btn:hover:not(:disabled) {
+    background: #2ea043;
+    border-color: #2ea043;
 }
 
 .github-create-repo-btn:disabled {
-    background: var(--vscode-button-secondaryBackground);
-    color: var(--vscode-button-secondaryForeground);
+    background: #30363d;
+    border-color: #30363d;
+    color: #8b949e;
     cursor: not-allowed;
-    box-shadow: none;
 }
 
 .error-message {
-    color: var(--vscode-errorForeground);
-    margin-top: 10px;
+    color: #f85149;
     font-size: 14px;
     text-align: center;
+    margin-top: 16px;
+    padding: 12px;
+    background: rgba(248, 81, 73, 0.1);
+    border: 1px solid rgba(248, 81, 73, 0.2);
+    border-radius: 6px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .github-create-repo-bg {
+        padding: 16px;
+    }
+    
+    .github-create-repo {
+        padding: 32px 24px;
+    }
+    
+    h1 {
+        font-size: 24px;
+    }
+    
+    .header .codicon {
+        font-size: 32px;
+    }
+    
+    .github-create-repo-desc {
+        font-size: 14px;
+    }
+}
+
+@media (max-width: 480px) {
+    .github-create-repo {
+        padding: 24px 16px;
+    }
+    
+    .radio-option,
+    .checkbox-option {
+        padding: 8px;
+    }
+    
+    .radio-option .codicon {
+        font-size: 16px;
+    }
 }

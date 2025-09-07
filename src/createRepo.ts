@@ -16,56 +16,61 @@ export function getCreateRepoWebviewContent(webview: vscode.Webview, nonce: stri
             <link href="${codiconsUri}" rel="stylesheet" />
             <title>Create a New Repository</title>
         </head>
-        <body class="vscode-dark">
+        <body>
             <div class="github-create-repo-bg">
-                <div class="container github-create-repo">
-                    <div class="header">
-                        <i class="codicon codicon-github-inverted"></i>
-                        <h1>Create a new repository</h1>
+                <div class="container">
+                    <div class="github-create-repo">
+                        <div class="header">
+                            <i class="codicon codicon-repo"></i>
+                            <h1>Create a new repository</h1>
+                        </div>
+                        <p class="github-create-repo-desc">A repository contains all project files, including the revision history. Already have a project repository elsewhere?</p>
+                        <form class="github-create-repo-form">
+                            <div class="form-group">
+                                <label for="repoName">Repository name <span class="required">*</span></label>
+                                <div class="input-with-icon">
+                                    <i class="codicon codicon-repo"></i>
+                                    <input type="text" id="repoName" name="repoName" required placeholder="my-awesome-project">
+                                </div>
+                                <p class="description">Great repository names are short and memorable. Need inspiration? How about <strong>stellar-octo-guide</strong>?</p>
+                            </div>
+                            <div class="form-group">
+                                <label for="description">Description <span class="description">(optional)</span></label>
+                                <input type="text" id="description" name="description" placeholder="Short description of this repository">
+                            </div>
+                            <div class="form-group visibility-group">
+                                <div class="radio-option">
+                                    <input type="radio" id="public" name="visibility" value="public" checked>
+                                    <label for="public">
+                                        <i class="codicon codicon-globe"></i>
+                                        <strong>Public</strong>
+                                        <span class="description">Anyone on the internet can see this repository. You choose who can commit.</span>
+                                    </label>
+                                </div>
+                                <div class="radio-option">
+                                    <input type="radio" id="private" name="visibility" value="private">
+                                    <label for="private">
+                                        <i class="codicon codicon-lock"></i>
+                                        <strong>Private</strong>
+                                        <span class="description">You choose who can see and commit to this repository.</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Initialize this repository with:</label>
+                                <div class="checkbox-option">
+                                    <input type="checkbox" id="addReadme" name="addReadme" checked>
+                                    <label for="addReadme">Add a README file</label>
+                                    <p class="description">This is where you can write a long description for your project. <a href="#" onclick="return false;">Learn more about READMEs</a>.</p>
+                                </div>
+                            </div>
+                            <button id="createRepoBtn" class="github-create-repo-btn">
+                                <i class="codicon codicon-add"></i>
+                                Create repository
+                            </button>
+                            <div id="error-message" class="error-message"></div>
+                        </form>
                     </div>
-                    <p class="github-create-repo-desc">A repository contains all project files, including the revision history.</p>
-                    <form class="github-create-repo-form">
-                        <div class="form-group">
-                            <label for="repoName">Repository name <span class="required">*</span></label>
-                            <div class="input-with-icon">
-                                <i class="codicon codicon-repo"></i>
-                                <input type="text" id="repoName" name="repoName" required placeholder="e.g. my-awesome-project">
-                            </div>
-                            <p class="description">Great repository names are short and memorable.</p>
-                        </div>
-                        <div class="form-group">
-                            <label for="description">Description <span class="description">(optional)</span></label>
-                            <input type="text" id="description" name="description" placeholder="Describe your repository">
-                        </div>
-                        <div class="form-group visibility-group">
-                            <div class="radio-option">
-                                <input type="radio" id="public" name="visibility" value="public" checked>
-                                <label for="public">
-                                    <i class="codicon codicon-globe"></i>
-                                    <strong>Public</strong>
-                                    <span class="description">Anyone on the internet can see this repository. You choose who can commit.</span>
-                                </label>
-                            </div>
-                            <div class="radio-option">
-                                <input type="radio" id="private" name="visibility" value="private">
-                                <label for="private">
-                                    <i class="codicon codicon-lock"></i>
-                                    <strong>Private</strong>
-                                    <span class="description">You choose who can see and commit to this repository.</span>
-                                </label>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label>Initialize this repository with:</label>
-                            <div class="checkbox-option">
-                                <input type="checkbox" id="addReadme" name="addReadme">
-                                <label for="addReadme">Add a README file</label>
-                                <p class="description">This is where you can write a long description for your project.</p>
-                            </div>
-                        </div>
-                        <button id="createRepoBtn" class="github-create-repo-btn"><i class="codicon codicon-add"></i>Create repository</button>
-                        <div id="error-message" class="error-message"></div>
-                    </form>
                 </div>
             </div>
             <script nonce="${nonce}">
@@ -76,7 +81,7 @@ export function getCreateRepoWebviewContent(webview: vscode.Webview, nonce: stri
                 const publicRadio = document.getElementById('public');
                 const addReadmeCheckbox = document.getElementById('addReadme');
                 const errorMessage = document.getElementById('error-message');
-                document.body.classList.add(document.body.dataset.vscodeThemeKind || 'vscode-dark');
+                
                 createRepoBtn.addEventListener('click', (e) => {
                     e.preventDefault();
                     const repoName = repoNameInput.value;
@@ -87,7 +92,7 @@ export function getCreateRepoWebviewContent(webview: vscode.Webview, nonce: stri
                     }
                     errorMessage.textContent = '';
                     createRepoBtn.disabled = true;
-                    createRepoBtn.innerHTML = '<i class="codicon codicon-sync codicon-spin"></i> Creating...';
+                    createRepoBtn.innerHTML = '<i class="codicon codicon-sync codicon-spin"></i> Creating repository...';
                     vscode.postMessage({
                         command: 'createRepository',
                         repoName: repoName,
@@ -96,6 +101,7 @@ export function getCreateRepoWebviewContent(webview: vscode.Webview, nonce: stri
                         initReadme: addReadmeCheckbox.checked
                     });
                 });
+                
                 window.addEventListener('message', event => {
                     const message = event.data;
                     if (message.command === 'creationFailed') {

@@ -542,6 +542,106 @@ function generateCommentHeatmap(commentActivity: { [key: string]: number }): str
     return heatmapHtml;
 }
 
+function generateEnhancedContributionGraph(commentActivity: { [key: string]: number }): string {
+    const today = new Date();
+    const oneYearAgo = new Date(today);
+    oneYearAgo.setFullYear(today.getFullYear() - 1);
+    
+    // Calculate total contributions
+    const totalContributions = Object.values(commentActivity).reduce((sum, count) => sum + count, 0);
+    
+    let html = '<div class="contribution-graph">';
+    
+    // Header with stats
+    html += '<div class="contribution-header">';
+    html += '<div class="contribution-stats">';
+    html += '<h3 class="contribution-title">Contributions</h3>';
+    html += `<p class="contribution-summary">${totalContributions} contributions in the last year</p>`;
+    html += '</div>';
+    
+    // Legend
+    html += '<div class="contribution-legend">';
+    html += '<span class="legend-text">Less</span>';
+    html += '<div class="legend-squares">';
+    for (let i = 0; i <= 4; i++) {
+        html += `<div class="legend-square level-${i}"></div>`;
+    }
+    html += '</div>';
+    html += '<span class="legend-text">More</span>';
+    html += '</div>';
+    html += '</div>';
+    
+    // Calendar
+    html += '<div class="contribution-calendar">';
+    
+    // Month labels
+    html += '<div class="month-labels">';
+    const months = [];
+    for (let i = 0; i < 12; i++) {
+        const month = new Date(oneYearAgo);
+        month.setMonth(oneYearAgo.getMonth() + i);
+        months.push(month.toLocaleDateString('en', { month: 'short' }));
+    }
+    months.forEach((month, index) => {
+        const width = index === 0 || index === 11 ? '13px' : '26px';
+        html += `<div class="month-label" style="width: ${width}">${month}</div>`;
+    });
+    html += '</div>';
+    
+    // Weekday labels and grid container
+    html += '<div class="calendar-body">';
+    html += '<div class="weekday-labels">';
+    html += '<div class="weekday-label"></div>'; // Empty for Mon
+    html += '<div class="weekday-label">Mon</div>';
+    html += '<div class="weekday-label"></div>'; // Empty
+    html += '<div class="weekday-label">Wed</div>';
+    html += '<div class="weekday-label"></div>'; // Empty
+    html += '<div class="weekday-label">Fri</div>';
+    html += '<div class="weekday-label"></div>'; // Empty for Sun
+    html += '</div>';
+    
+    // Contribution grid
+    html += '<div class="contribution-grid">';
+    
+    let currentDate = new Date(oneYearAgo);
+    // Start from Sunday (0) of the week containing oneYearAgo
+    currentDate.setDate(currentDate.getDate() - currentDate.getDay());
+    
+    for (let week = 0; week < 53; week++) {
+        html += '<div class="contribution-week">';
+        for (let day = 0; day < 7; day++) {
+            const dateKey = currentDate.toISOString().split('T')[0];
+            const count = commentActivity[dateKey] || 0;
+            
+            let level = 0;
+            if (count > 0 && count <= 2) level = 1;
+            else if (count > 2 && count <= 5) level = 2;
+            else if (count > 5 && count <= 8) level = 3;
+            else if (count > 8) level = 4;
+            
+            const isInRange = currentDate >= oneYearAgo && currentDate <= today;
+            const tooltip = isInRange ? 
+                `${count} contribution${count !== 1 ? 's' : ''} on ${currentDate.toLocaleDateString('en', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}` : 
+                '';
+            
+            html += `<div class="contribution-day ${isInRange ? 'active' : 'inactive'} level-${isInRange ? level : 0}" 
+                       data-date="${dateKey}" 
+                       data-count="${count}"
+                       title="${tooltip}"></div>`;
+            
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+        html += '</div>';
+    }
+    
+    html += '</div>'; // End contribution-grid
+    html += '</div>'; // End calendar-body
+    html += '</div>'; // End contribution-calendar
+    html += '</div>'; // End contribution-graph
+    
+    return html;
+}
+
 export function activate(context: vscode.ExtensionContext) {
     const githubActivityProvider = new GitHubActivityProvider();
     vscode.window.registerTreeDataProvider('github-activity-dashboard', githubActivityProvider);
@@ -653,7 +753,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     vscode.commands.registerCommand('github-activity-dashboard.openProfile', async () => {
         try {
-            const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
+            const session = await vscode.authentication.getSession('github', ['repo', 'delete_repo'], { createIfNone: true });
             const octokit = new Octokit({ auth: session.accessToken });
         const user = await octokit.users.getAuthenticated();
         const userData = user.data;
@@ -742,6 +842,42 @@ export function activate(context: vscode.ExtensionContext) {
                 recentIssues = issuesResponse.data.items;
             } catch (error) {
                 console.log('Could not fetch recent issues:', error);
+            }
+
+            // Fetch user's gists
+            let userGists: any[] = [];
+            try {
+                const gistsResponse = await octokit.gists.listForUser({
+                    username: userData.login,
+                    per_page: 10
+                });
+                userGists = gistsResponse.data;
+            } catch (error) {
+                console.log('Could not fetch user gists:', error);
+            }
+
+            // Fetch followers
+            let followers: any[] = [];
+            try {
+                const followersResponse = await octokit.users.listFollowersForUser({
+                    username: userData.login,
+                    per_page: 20
+                });
+                followers = followersResponse.data;
+            } catch (error) {
+                console.log('Could not fetch followers:', error);
+            }
+
+            // Fetch following
+            let following: any[] = [];
+            try {
+                const followingResponse = await octokit.users.listFollowingForUser({
+                    username: userData.login,
+                    per_page: 20
+                });
+                following = followingResponse.data;
+            } catch (error) {
+                console.log('Could not fetch following:', error);
             }
 
             // Fetch user's sponsors/sponsoring data
@@ -1077,23 +1213,26 @@ export function activate(context: vscode.ExtensionContext) {
                         case 'deleteRepository':
                             try {
                                 console.log('Deleting repository:', message.owner, message.repo);
-                                const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
+                                const session = await vscode.authentication.getSession('github', ['repo', 'delete_repo'], { createIfNone: true });
                                 const octokit = new Octokit({ auth: session.accessToken });
                                 
+                                // Get current user info
+                                const currentUser = await octokit.users.getAuthenticated();
+                                
                                 // Check if user owns the repository before attempting deletion
-                                try {
-                                    const repoInfo = await octokit.repos.get({
-                                        owner: message.owner,
-                                        repo: message.repo
-                                    });
-                                    
-                                    if (repoInfo.data.owner.login !== session.account.label) {
-                                        vscode.window.showErrorMessage(`You don't have permission to delete ${message.owner}/${message.repo}`);
-                                        return;
-                                    }
-                                } catch (error: any) {
-                                    console.error('Error checking repository ownership:', error);
-                                    vscode.window.showErrorMessage(`Failed to verify ownership of ${message.owner}/${message.repo}`);
+                                if (message.owner !== currentUser.data.login) {
+                                    vscode.window.showErrorMessage(`You don't have permission to delete ${message.owner}/${message.repo}. You can only delete your own repositories.`);
+                                    return;
+                                }
+                                
+                                // Show confirmation dialog
+                                const confirmation = await vscode.window.showWarningMessage(
+                                    `Are you sure you want to delete ${message.owner}/${message.repo}? This action cannot be undone.`,
+                                    { modal: true },
+                                    'Delete Repository'
+                                );
+                                
+                                if (confirmation !== 'Delete Repository') {
                                     return;
                                 }
                                 
@@ -1101,11 +1240,9 @@ export function activate(context: vscode.ExtensionContext) {
                                     owner: message.owner,
                                     repo: message.repo
                                 });
-                                vscode.window.showInformationMessage(`Deleted repository ${message.owner}/${message.repo}`);
+                                vscode.window.showInformationMessage(`Successfully deleted repository ${message.owner}/${message.repo}`);
                                 
                                 // Fetch updated repositories list
-                                const user = await octokit.users.getAuthenticated();
-                                const userData = user.data;
                                 let updatedRepos: any[] = [];
                                 try {
                                     const reposResponse = await octokit.repos.listForAuthenticatedUser({
@@ -1130,6 +1267,14 @@ export function activate(context: vscode.ExtensionContext) {
                             } catch (error: any) {
                                 console.error('Error deleting repository:', error);
                                 vscode.window.showErrorMessage(`Failed to delete repository: ${error.message}`);
+                                
+                                // Send error message to webview to reset button state
+                                panel.webview.postMessage({
+                                    command: 'deleteError',
+                                    owner: message.owner,
+                                    repo: message.repo,
+                                    error: error.message
+                                });
                             }
                             break;
                     }
@@ -1450,47 +1595,50 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
             <style>
                 /* Professional Design System with VS Code Theme Integration */
                 :root {
-                    /* VS Code Theme Colors */
-                    --vscode-bg: var(--vscode-editor-background, #1e1e1e);
-                    --vscode-fg: var(--vscode-editor-foreground, #cccccc);
-                    --vscode-panel-bg: var(--vscode-panel-background, #252526);
-                    --vscode-panel-border: var(--vscode-panel-border, #3e3e42);
-                    --vscode-input-bg: var(--vscode-input-background, #3c3c3c);
-                    --vscode-input-border: var(--vscode-input-border, #3e3e42);
-                    --vscode-input-fg: var(--vscode-input-foreground, #cccccc);
-                    --vscode-focus-border: var(--vscode-focusBorder, #0078d4);
-                    --vscode-button-bg: var(--vscode-button-background, #0e639c);
-                    --vscode-button-fg: var(--vscode-button-foreground, #ffffff);
-                    --vscode-button-hover: var(--vscode-button-hoverBackground, #1177bb);
-                    --vscode-text-link: var(--vscode-textLink-foreground, #3794ff);
-                    --vscode-text-link-active: var(--vscode-textLink-activeForeground, #3794ff);
-                    --vscode-description-fg: var(--vscode-descriptionForeground, #cccccc99);
-                    --vscode-widget-shadow: var(--vscode-widget-shadow, rgba(0, 0, 0, 0.36));
-                    --vscode-toolbar-bg: var(--vscode-toolbar-background, #252526);
-                    --vscode-toolbar-hover: var(--vscode-toolbar-hoverBackground, #2a2d2e);
+                    /* GitHub Colors */
+                    --color-canvas-default: #0d1117;
+                    --color-canvas-subtle: #161b22;
+                    --color-border-default: #30363d;
+                    --color-border-muted: #21262d;
+                    --color-fg-default: #f0f6fc;
+                    --color-fg-muted: #c9d1d9;
+                    --color-fg-subtle: #8b949e;
+                    --color-accent-fg: #58a6ff;
+                    --color-accent-emphasis: #1f6feb;
+                    --color-success-fg: #56d364;
+                    --color-success-emphasis: #238636;
+                    --color-warning-fg: #d29922;
+                    --color-warning-emphasis: #bb8009;
+                    --color-danger-fg: #f85149;
+                    --color-danger-emphasis: #da3633;
                     
-                    /* Semantic Colors */
-                    --vscode-error: var(--vscode-errorForeground, #f48771);
-                    --vscode-warning: var(--vscode-warningForeground, #cca700);
-                    --vscode-success: var(--vscode-successForeground, #89d185);
-                    --vscode-info: var(--vscode-infoForeground, #3794ff);
+                    /* GitHub Typography */
+                    --font-size-small: 12px;
+                    --font-size-normal: 14px;
+                    --font-size-medium: 16px;
+                    --font-size-large: 18px;
+                    --font-size-xl: 20px;
+                    --font-size-2xl: 24px;
+                    --font-size-3xl: 28px;
                     
-                    /* Custom Design Tokens */
-                    --shadow-sm: 0 1px 2px var(--vscode-widget-shadow);
-                    --shadow: 0 1px 3px var(--vscode-widget-shadow), 0 1px 2px rgba(0, 0, 0, 0.1);
-                    --shadow-md: 0 4px 6px var(--vscode-widget-shadow), 0 2px 4px rgba(0, 0, 0, 0.1);
-                    --shadow-lg: 0 10px 15px var(--vscode-widget-shadow), 0 4px 6px rgba(0, 0, 0, 0.1);
-                    --shadow-xl: 0 20px 25px var(--vscode-widget-shadow), 0 8px 10px rgba(0, 0, 0, 0.1);
+                    /* GitHub Spacing */
+                    --spacing-1: 4px;
+                    --spacing-2: 8px;
+                    --spacing-3: 12px;
+                    --spacing-4: 16px;
+                    --spacing-5: 20px;
+                    --spacing-6: 24px;
+                    --spacing-8: 32px;
                     
-                    --border-radius-sm: 3px;
-                    --border-radius: 6px;
-                    --border-radius-md: 8px;
-                    --border-radius-lg: 12px;
-                    --border-radius-xl: 16px;
+                    /* GitHub Border Radius */
+                    --border-radius-small: 6px;
+                    --border-radius-medium: 8px;
+                    --border-radius-large: 12px;
                     
-                    --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
-                    --transition-normal: 300ms cubic-bezier(0.4, 0, 0.2, 1);
-                    --transition-slow: 500ms cubic-bezier(0.4, 0, 0.2, 1);
+                    /* GitHub Shadows */
+                    --shadow-small: 0 1px 0 rgba(27,31,35,0.04);
+                    --shadow-medium: 0 3px 6px rgba(27,31,35,0.15);
+                    --shadow-large: 0 8px 24px rgba(27,31,35,0.2);
                 }
 
                 * {
@@ -1500,10 +1648,11 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                 }
 
                 body {
-                    font-family: var(--vscode-font-family, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif);
-                    background: var(--vscode-bg);
-                    color: var(--vscode-fg);
-                    line-height: 1.6;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+                    font-size: var(--font-size-normal);
+                    line-height: 1.5;
+                    color: var(--color-fg-default);
+                    background-color: var(--color-canvas-default);
                     -webkit-font-smoothing: antialiased;
                     -moz-osx-font-smoothing: grayscale;
                 }
@@ -1511,20 +1660,19 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                 .container {
                     max-width: 1400px;
                     margin: 0 auto;
-                    padding: 2rem;
+                    padding: var(--spacing-6);
                     min-height: 100vh;
                 }
 
-                /* Header Section */
                 .header {
-                    background: var(--vscode-panel-bg);
-                    border: 1px solid var(--vscode-panel-border);
-                    border-radius: var(--border-radius-xl);
-                    padding: 2.5rem;
-                    margin-bottom: 2rem;
-                    box-shadow: var(--shadow-lg);
+                    background: var(--color-canvas-subtle);
+                    border: 1px solid var(--color-border-default);
+                    border-radius: var(--border-radius-large);
+                    padding: var(--spacing-8);
+                    margin-bottom: var(--spacing-6);
+                    box-shadow: var(--shadow-large);
                     display: flex;
-                    gap: 3rem;
+                    gap: var(--spacing-8);
                     align-items: center;
                     position: relative;
                     overflow: hidden;
@@ -1537,15 +1685,15 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     left: 0;
                     right: 0;
                     height: 4px;
-                    background: linear-gradient(90deg, var(--vscode-focus-border), var(--vscode-text-link), var(--vscode-info));
+                    background: linear-gradient(90deg, var(--color-accent-emphasis), var(--color-accent-fg), var(--color-success-fg));
                 }
 
                 .avatar {
                     width: 120px;
                     height: 120px;
                     border-radius: 50%;
-                    border: 4px solid rgba(255, 255, 255, 0.8);
-                    box-shadow: var(--shadow-xl);
+                    border: 4px solid var(--color-canvas-default);
+                    box-shadow: var(--shadow-large);
                     position: relative;
                     z-index: 1;
                 }
@@ -1560,158 +1708,166 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     display: flex;
                     justify-content: space-between;
                     align-items: flex-start;
-                    margin-bottom: 1.5rem;
+                    margin-bottom: var(--spacing-4);
                 }
 
                 .title {
-                    font-size: 2.5rem;
+                    font-size: var(--font-size-3xl);
                     font-weight: 800;
-                    color: var(--vscode-fg);
-                    margin-bottom: 0.5rem;
+                    color: var(--color-fg-default);
+                    margin-bottom: var(--spacing-2);
                     letter-spacing: -0.025em;
                 }
 
                 .subtitle {
-                    font-size: 1.125rem;
-                    color: var(--vscode-description-fg);
+                    font-size: var(--font-size-large);
+                    color: var(--color-fg-muted);
                     font-weight: 500;
                 }
 
                 .bio {
-                    font-size: 1rem;
-                    color: var(--vscode-fg);
+                    font-size: var(--font-size-normal);
+                    color: var(--color-fg-default);
                     line-height: 1.7;
-                    margin-bottom: 2rem;
+                    margin-bottom: var(--spacing-6);
                     max-width: 600px;
                 }
 
                 .stats {
                     display: grid;
                     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-                    gap: 1.5rem;
+                    gap: var(--spacing-4);
                 }
 
                 .stat-item {
-                    background: var(--vscode-toolbar-bg);
-                    border: 1px solid var(--vscode-panel-border);
-                    border-radius: var(--border-radius-lg);
-                    padding: 1.25rem;
+                    background: var(--color-canvas-default);
+                    border: 1px solid var(--color-border-default);
+                    border-radius: var(--border-radius-medium);
+                    padding: var(--spacing-5);
                     text-align: center;
-                    box-shadow: var(--shadow);
+                    box-shadow: var(--shadow-medium);
                     transition: var(--transition-fast);
                 }
 
                 .stat-item:hover {
                     transform: translateY(-2px);
-                    box-shadow: var(--shadow-md);
-                    border-color: var(--vscode-focus-border);
+                    box-shadow: var(--shadow-large);
+                    border-color: var(--color-accent-emphasis);
                 }
 
                 .stat-number {
-                    font-size: 2rem;
+                    font-size: var(--font-size-2xl);
                     font-weight: 900;
-                    color: var(--vscode-text-link);
+                    color: var(--color-accent-fg);
                     display: block;
-                    margin-bottom: 0.25rem;
+                    margin-bottom: var(--spacing-1);
                 }
 
                 .stat-label {
-                    font-size: 0.875rem;
-                    color: var(--vscode-description-fg);
+                    font-size: var(--font-size-small);
+                    color: var(--color-fg-muted);
                     font-weight: 600;
                     text-transform: uppercase;
                     letter-spacing: 0.05em;
                 }
 
                 .primary-btn {
-                    background: var(--vscode-button-bg);
-                    color: var(--vscode-button-fg);
-                    border: 1px solid var(--vscode-focus-border);
-                    border-radius: var(--border-radius-lg);
-                    padding: 0.875rem 1.75rem;
+                    background: var(--color-accent-emphasis);
+                    color: var(--color-canvas-default);
+                    border: 1px solid var(--color-accent-emphasis);
+                    border-radius: var(--border-radius-medium);
+                    padding: var(--spacing-3) var(--spacing-5);
                     font-weight: 600;
-                    font-size: 0.95rem;
+                    font-size: var(--font-size-normal);
                     cursor: pointer;
                     transition: var(--transition-fast);
-                    box-shadow: var(--shadow-md);
+                    box-shadow: var(--shadow-medium);
                     display: inline-flex;
                     align-items: center;
-                    gap: 0.5rem;
+                    gap: var(--spacing-2);
+                    text-decoration: none;
                 }
 
                 .primary-btn:hover {
-                    background: var(--vscode-button-hover);
-                    box-shadow: var(--shadow-xl);
+                    background: var(--color-accent-fg);
+                    box-shadow: var(--shadow-large);
+                    transform: translateY(-1px);
                 }
 
                 .primary-btn:active {
                     transform: translateY(0);
+                    box-shadow: var(--shadow-medium);
                 }
 
                 /* Navigation Tabs */
                 .tabs {
                     display: flex;
-                    gap: 0.5rem;
-                    margin: 2.5rem 0 2rem;
-                    padding: 0.5rem;
-                    background: var(--vscode-toolbar-bg);
-                    border: 1px solid var(--vscode-panel-border);
-                    border-radius: var(--border-radius-xl);
-                    box-shadow: var(--shadow);
+                    gap: var(--spacing-2);
+                    margin: var(--spacing-8) 0 var(--spacing-4);
+                    padding: var(--spacing-2);
+                    background: var(--color-canvas-subtle);
+                    border: 1px solid var(--color-border-default);
+                    border-radius: var(--border-radius-large);
+                    box-shadow: var(--shadow-medium);
+                    overflow: hidden;
                 }
 
                 .tab {
                     background: transparent;
                     border: none;
-                    color: var(--vscode-description-fg);
-                    padding: 0.875rem 1.5rem;
+                    color: var(--color-fg-muted);
+                    padding: var(--spacing-4) var(--spacing-5);
                     cursor: pointer;
-                    border-radius: var(--border-radius-lg);
+                    border-radius: var(--border-radius-medium);
                     font-weight: 600;
-                    font-size: 0.95rem;
+                    font-size: var(--font-size-normal);
                     transition: var(--transition-fast);
                     position: relative;
                     display: flex;
                     align-items: center;
-                    gap: 0.5rem;
+                    gap: var(--spacing-2);
+                    text-decoration: none;
                 }
 
                 .tab:hover {
-                    background: var(--vscode-toolbar-hover);
-                    color: var(--vscode-fg);
+                    background: var(--color-canvas-subtle);
+                    color: var(--color-fg-default);
                 }
 
                 .tab.active {
-                    background: var(--vscode-input-bg);
-                    color: var(--vscode-text-link);
-                    box-shadow: var(--shadow-sm);
+                    background: var(--color-accent-emphasis);
+                    color: var(--color-canvas-default);
+                    box-shadow: var(--shadow-small);
                     font-weight: 700;
                 }
 
                 .tab .count {
-                    background: var(--vscode-toolbar-hover);
-                    color: var(--vscode-description-fg);
-                    padding: 0.25rem 0.75rem;
+                    background: var(--color-canvas-subtle);
+                    color: var(--color-fg-muted);
+                    padding: var(--spacing-1) var(--spacing-3);
                     border-radius: 999px;
-                    font-size: 0.75rem;
+                    font-size: var(--font-size-small);
                     font-weight: 700;
-                    margin-left: 0.5rem;
+                    margin-left: var(--spacing-2);
+                    border: 1px solid var(--color-border-muted);
                 }
 
                 .tab.active .count {
-                    background: rgba(55, 148, 255, 0.1);
-                    color: var(--vscode-text-link);
+                    background: rgba(255, 255, 255, 0.2);
+                    color: var(--color-canvas-default);
+                    border-color: rgba(255, 255, 255, 0.3);
                 }
 
                 /* Content Sections */
                 .section {
                     display: none;
-                    background: var(--vscode-panel-bg);
-                    border: 1px solid var(--vscode-panel-border);
-                    border-radius: var(--border-radius-xl);
-                    padding: 2.5rem;
-                    margin-bottom: 2rem;
-                    box-shadow: var(--shadow-lg);
+                    background: var(--color-canvas-subtle);
+                    border: 1px solid var(--color-border-default);
+                    border-radius: var(--border-radius-large);
+                    padding: var(--spacing-8);
+                    margin-bottom: var(--spacing-6);
+                    box-shadow: var(--shadow-large);
+                    position: relative;
                 }
 
                 .section.active {
@@ -1719,50 +1875,53 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                 }
 
                 .section-title {
-                    font-size: 1.5rem;
+                    font-size: var(--font-size-xl);
                     font-weight: 700;
-                    color: var(--vscode-fg);
-                    margin-bottom: 1.5rem;
+                    color: var(--color-fg-default);
+                    margin-bottom: var(--spacing-4);
                     display: flex;
                     align-items: center;
-                    gap: 0.75rem;
+                    gap: var(--spacing-3);
+                    padding-bottom: var(--spacing-2);
+                    border-bottom: 1px solid var(--color-border-muted);
                 }
 
                 /* Filters */
                 .filters {
                     display: flex;
-                    gap: 1rem;
-                    margin-bottom: 2rem;
-                    padding: 1.5rem;
-                    background: var(--vscode-toolbar-bg);
-                    border: 1px solid var(--vscode-panel-border);
-                    border-radius: var(--border-radius-lg);
-                    box-shadow: var(--shadow);
+                    gap: var(--spacing-4);
+                    margin-bottom: var(--spacing-6);
+                    padding: var(--spacing-5);
+                    background: var(--color-canvas-subtle);
+                    border: 1px solid var(--color-border-default);
+                    border-radius: var(--border-radius-medium);
+                    box-shadow: var(--shadow-medium);
                     flex-wrap: wrap;
                     align-items: center;
                 }
 
                 .input, .select {
-                    background: var(--vscode-input-bg);
-                    color: var(--vscode-input-fg);
-                    border: 2px solid var(--vscode-input-border);
-                    border-radius: var(--border-radius-lg);
-                    padding: 0.75rem 1rem;
-                    font-size: 0.9rem;
+                    background: var(--color-canvas-default);
+                    color: var(--color-fg-default);
+                    border: 1px solid var(--color-border-default);
+                    border-radius: var(--border-radius-medium);
+                    padding: var(--spacing-3) var(--spacing-4);
+                    font-size: var(--font-size-normal);
                     font-weight: 500;
                     min-width: 200px;
                     transition: var(--transition-fast);
-                    box-shadow: var(--shadow-sm);
+                    box-shadow: var(--shadow-small);
                 }
 
                 .input:focus, .select:focus {
                     outline: none;
-                    border-color: var(--vscode-focus-border);
-                    box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.1);
+                    border-color: var(--color-accent-emphasis);
+                    box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.1);
                 }
 
                 .input::placeholder {
-                    color: var(--vscode-description-fg);
+                    color: var(--color-fg-muted);
+                    font-weight: 400;
                 }
 
                 .right {
@@ -1773,18 +1932,18 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                 .grid {
                     display: grid;
                     grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-                    gap: 1.5rem;
+                    gap: var(--spacing-4);
                 }
 
                 .card {
-                    background: var(--vscode-panel-bg);
-                    border: 1px solid var(--vscode-panel-border);
-                    border-radius: var(--border-radius-xl);
-                    padding: 1.75rem;
+                    background: var(--color-canvas-default);
+                    border: 1px solid var(--color-border-default);
+                    border-radius: var(--border-radius-large);
+                    padding: var(--spacing-5);
                     position: relative;
                     transition: var(--transition-normal);
                     cursor: pointer;
-                    box-shadow: var(--shadow);
+                    box-shadow: var(--shadow-medium);
                     overflow: hidden;
                     min-height: 240px;
                 }
@@ -1796,15 +1955,15 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     left: 0;
                     right: 0;
                     height: 4px;
-                    background: linear-gradient(90deg, var(--vscode-focus-border), var(--vscode-text-link));
+                    background: linear-gradient(90deg, var(--color-accent-emphasis), var(--color-accent-fg));
                     transform: scaleX(0);
                     transition: var(--transition-normal);
                 }
 
                 .card:hover {
                     transform: translateY(-4px) scale(1.01);
-                    box-shadow: var(--shadow-xl);
-                    border-color: var(--vscode-focus-border);
+                    box-shadow: var(--shadow-large);
+                    border-color: var(--color-accent-emphasis);
                 }
 
                 .card:hover::before {
@@ -1815,54 +1974,56 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     display: flex;
                     justify-content: space-between;
                     align-items: flex-start;
-                    margin-bottom: 1rem;
+                    margin-bottom: var(--spacing-3);
                 }
 
                 .card-title {
-                    font-size: 1.125rem;
+                    font-size: var(--font-size-large);
                     font-weight: 700;
-                    color: var(--vscode-text-link);
+                    color: var(--color-accent-fg);
                     text-decoration: none;
                     display: block;
-                    margin-bottom: 0.5rem;
+                    margin-bottom: var(--spacing-2);
                     line-height: 1.4;
                     transition: var(--transition-fast);
                     flex: 1;
                 }
 
                 .card-title:hover {
-                    color: var(--vscode-text-link-active);
+                    color: var(--color-accent-emphasis);
+                    text-decoration: underline;
                 }
 
                 .badge {
-                    font-size: 0.75rem;
+                    font-size: var(--font-size-small);
                     font-weight: 700;
-                    padding: 0.375rem 0.875rem;
+                    padding: var(--spacing-1) var(--spacing-3);
                     border-radius: 999px;
                     text-transform: uppercase;
-                    letter-spacing: 0.05em;
+                    letter-spacing: 0.5px;
                     border: 1px solid;
                     display: inline-flex;
                     align-items: center;
-                    gap: 0.25rem;
+                    gap: var(--spacing-1);
+                    font-family: var(--font-family-mono, 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace);
                 }
 
                 .badge.public {
-                    background: rgba(137, 209, 133, 0.1);
-                    color: var(--vscode-success);
-                    border-color: var(--vscode-success);
+                    background: rgba(86, 211, 100, 0.1);
+                    color: var(--color-success-fg);
+                    border-color: var(--color-success-fg);
                 }
 
                 .badge.private {
-                    background: rgba(204, 167, 0, 0.1);
-                    color: var(--vscode-warning);
-                    border-color: var(--vscode-warning);
+                    background: rgba(214, 148, 34, 0.1);
+                    color: var(--color-warning-fg);
+                    border-color: var(--color-warning-fg);
                 }
 
                 .desc {
-                    color: var(--vscode-description-fg);
-                    font-size: 0.9rem;
-                    margin-bottom: 1.25rem;
+                    color: var(--color-fg-muted);
+                    font-size: var(--font-size-normal);
+                    margin-bottom: var(--spacing-4);
                     line-height: 1.6;
                     display: -webkit-box;
                     -webkit-line-clamp: 2;
@@ -1872,29 +2033,31 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
 
                 .meta {
                     display: flex;
-                    gap: 1rem;
-                    color: var(--vscode-description-fg);
-                    font-size: 0.85rem;
+                    gap: var(--spacing-3);
+                    color: var(--color-fg-muted);
+                    font-size: var(--font-size-small);
                     align-items: center;
                     flex-wrap: wrap;
-                    margin-bottom: 1.25rem;
+                    margin-bottom: var(--spacing-4);
                 }
 
                 .meta-item {
                     display: flex;
                     align-items: center;
-                    gap: 0.5rem;
-                    padding: 0.5rem 0.875rem;
-                    background: var(--vscode-toolbar-bg);
-                    border: 1px solid var(--vscode-panel-border);
-                    border-radius: var(--border-radius-md);
+                    gap: var(--spacing-2);
+                    padding: var(--spacing-2) var(--spacing-3);
+                    background: var(--color-canvas-subtle);
+                    border: 1px solid var(--color-border-muted);
+                    border-radius: var(--border-radius-small);
                     transition: var(--transition-fast);
                     font-weight: 500;
+                    font-size: var(--font-size-small);
                 }
 
                 .meta-item:hover {
-                    background: var(--vscode-toolbar-hover);
+                    background: var(--color-canvas-default);
                     transform: translateY(-1px);
+                    box-shadow: var(--shadow-small);
                 }
 
                 .lang-dot {
@@ -1902,7 +2065,7 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     height: 12px;
                     border-radius: 50%;
                     display: inline-block;
-                    border: 2px solid rgba(255, 255, 255, 0.8);
+                    border: 2px solid var(--color-canvas-default);
                     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
                 }
 
@@ -1911,63 +2074,80 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     justify-content: space-between;
                     align-items: center;
                     margin-top: auto;
-                    padding-top: 1rem;
-                    border-top: 1px solid var(--gray-100);
+                    padding-top: var(--spacing-3);
+                    border-top: 1px solid var(--color-border-muted);
                 }
 
                 .card-actions {
                     display: flex;
-                    gap: 0.5rem;
+                    gap: var(--spacing-2);
                 }
 
                 .icon-btn {
-                    background: var(--vscode-toolbar-bg);
-                    color: var(--vscode-fg);
-                    border: 1px solid var(--vscode-panel-border);
-                    border-radius: var(--border-radius-lg);
-                    padding: 0.5rem 1rem;
+                    background: var(--color-canvas-subtle);
+                    color: var(--color-fg-default);
+                    border: 1px solid var(--color-border-default);
+                    border-radius: var(--border-radius-medium);
+                    padding: var(--spacing-2) var(--spacing-4);
                     cursor: pointer;
-                    font-size: 0.8rem;
+                    font-size: var(--font-size-small);
                     font-weight: 600;
                     transition: var(--transition-fast);
                     display: inline-flex;
                     align-items: center;
-                    gap: 0.375rem;
+                    gap: var(--spacing-2);
                     min-width: 70px;
                     justify-content: center;
+                    text-decoration: none;
                 }
 
                 .icon-btn:hover {
-                    background: var(--vscode-toolbar-hover);
+                    background: var(--color-canvas-default);
                     transform: translateY(-1px);
-                    box-shadow: var(--shadow);
+                    box-shadow: var(--shadow-medium);
+                    border-color: var(--color-accent-emphasis);
                 }
 
                 .icon-btn.danger {
-                    background: rgba(239, 68, 68, 0.1);
-                    color: var(--vscode-error);
-                    border-color: var(--vscode-error);
+                    background: transparent;
+                    color: var(--vscode-errorForeground);
+                    border: 1px solid var(--vscode-errorForeground);
+                    opacity: 0.8;
                 }
 
                 .icon-btn.danger:hover {
-                    background: rgba(239, 68, 68, 0.2);
-                    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+                    background: var(--vscode-errorForeground);
+                    color: var(--vscode-editor-background);
+                    opacity: 1;
+                    transform: translateY(-1px);
+                }
+
+                .icon-btn.danger:disabled {
+                    opacity: 0.6;
+                    cursor: not-allowed;
+                    transform: none;
+                }
+
+                .icon-btn.danger:disabled:hover {
+                    background: transparent;
+                    color: var(--vscode-errorForeground);
+                    transform: none;
                 }
 
                 .updated-text {
-                    font-size: 0.8rem;
-                    color: var(--vscode-description-fg);
+                    font-size: var(--font-size-small);
+                    color: var(--color-fg-muted);
                     font-style: italic;
                 }
 
                 .repo-icon {
                     position: absolute;
-                    top: 1.25rem;
-                    right: 1.25rem;
+                    top: var(--spacing-3);
+                    right: var(--spacing-3);
                     width: 24px;
                     height: 24px;
                     opacity: 0.3;
-                    color: var(--vscode-text-link);
+                    color: var(--color-accent-fg);
                     transition: var(--transition-fast);
                 }
 
@@ -1977,125 +2157,497 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
 
                 /* Heatmap */
                 .heatmap {
-                    background: var(--vscode-panel-bg);
-                    border: 1px solid var(--vscode-panel-border);
-                    border-radius: var(--border-radius-xl);
-                    padding: 2rem;
-                    margin-top: 2rem;
-                    box-shadow: var(--shadow-lg);
+                    background: var(--color-canvas-subtle);
+                    border: 1px solid var(--color-border-default);
+                    border-radius: var(--border-radius-large);
+                    padding: var(--spacing-6);
+                    margin-top: var(--spacing-6);
+                    box-shadow: var(--shadow-large);
+                    position: relative;
                 }
 
                 .heatmap-header {
                     display: flex;
                     justify-content: space-between;
                     align-items: center;
-                    margin-bottom: 1.5rem;
+                    margin-bottom: var(--spacing-4);
+                    padding-bottom: var(--spacing-3);
+                    border-bottom: 1px solid var(--color-border-muted);
                 }
 
                 .heatmap-title {
-                    font-size: 1.25rem;
+                    font-size: var(--font-size-xl);
                     font-weight: 700;
-                    color: var(--vscode-fg);
+                    color: var(--color-fg-default);
+                    margin: 0;
                 }
 
                 .heatmap-legend {
                     display: flex;
-                    gap: 1rem;
+                    gap: var(--spacing-3);
                     align-items: center;
                 }
 
                 .legend-text {
-                    font-size: 0.8rem;
-                    color: var(--vscode-description-fg);
+                    font-size: var(--font-size-small);
+                    color: var(--color-fg-muted);
                     font-weight: 500;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
                 }
 
                 .legend-squares {
                     display: flex;
-                    gap: 0.25rem;
+                    gap: var(--spacing-1);
                 }
 
                 .legend-square {
                     width: 12px;
                     height: 12px;
                     border-radius: 2px;
-                    border: 1px solid var(--gray-300);
+                    border: 1px solid var(--color-border-muted);
                 }
 
                 .heatmap-graph {
                     display: flex;
                     flex-direction: column;
-                    gap: 0.25rem;
+                    gap: var(--spacing-1);
+                    padding: var(--spacing-4);
+                    background: var(--color-canvas-default);
+                    border-radius: var(--border-radius-medium);
+                    border: 1px solid var(--color-border-muted);
                 }
 
                 .month-labels {
                     display: grid;
                     grid-template-columns: repeat(12, 1fr);
-                    gap: 0.25rem;
-                    margin-bottom: 0.5rem;
+                    gap: var(--spacing-1);
+                    margin-bottom: var(--spacing-2);
+                    padding: 0 var(--spacing-2);
                 }
 
                 .month-label {
-                    font-size: 0.7rem;
-                    color: var(--gray-500);
+                    font-size: var(--font-size-small);
+                    color: var(--color-fg-subtle);
                     text-align: center;
                     font-weight: 500;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
                 }
 
                 .day-labels {
                     display: flex;
                     justify-content: space-around;
-                    margin-bottom: 0.25rem;
+                    margin-bottom: var(--spacing-1);
+                    padding: 0 var(--spacing-2);
                 }
 
                 .day-label {
-                    font-size: 0.7rem;
-                    color: var(--gray-500);
+                    font-size: var(--font-size-small);
+                    color: var(--color-fg-subtle);
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                    font-weight: 500;
                 }
 
                 .weeks-grid {
                     display: grid;
                     grid-template-columns: repeat(53, 1fr);
-                    gap: 0.125rem;
+                    gap: var(--spacing-1);
+                    justify-items: center;
                 }
 
                 .week-column {
                     display: flex;
                     flex-direction: column;
-                    gap: 0.125rem;
+                    gap: var(--spacing-1);
+                    align-items: center;
                 }
 
                 .day-square {
                     width: 10px;
                     height: 10px;
                     border-radius: 2px;
-                    border: 1px solid var(--gray-200);
+                    border: 1px solid var(--color-border-muted);
                     transition: var(--transition-fast);
+                    background: var(--color-canvas-subtle);
                 }
 
                 .day-square:hover {
                     opacity: 0.8;
                 }
 
-                .day-square.empty {
-                    opacity: 0.2;
+                .day-square.level-1 {
+                    background: #0e4429;
+                }
+
+                .day-square.level-2 {
+                    background: #006d32;
+                }
+
+                .day-square.level-3 {
+                    background: #26a641;
+                }
+
+                .day-square.level-4 {
+                    background: #39d353;
+                }
+
+                /* Contribution Graph Styles */
+                .contribution-graph {
+                    background: var(--vscode-editor-background);
+                    border: 1px solid var(--vscode-panel-border);
+                    border-radius: 8px;
+                    padding: 20px;
+                    margin: 20px 0;
+                    font-family: var(--vscode-font-family);
+                }
+
+                .contribution-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 16px;
+                    padding-bottom: 12px;
+                    border-bottom: 1px solid var(--vscode-panel-border);
+                }
+
+                .contribution-stats {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 4px;
+                }
+
+                .contribution-title {
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: var(--vscode-editor-foreground);
+                    margin: 0;
+                }
+
+                .contribution-summary {
+                    font-size: 12px;
+                    color: var(--vscode-descriptionForeground);
+                    margin: 0;
+                }
+
+                .contribution-legend {
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                    font-size: 11px;
+                    color: var(--vscode-descriptionForeground);
+                }
+
+                .legend-text {
+                    font-size: 11px;
+                    color: var(--vscode-descriptionForeground);
+                }
+
+                .legend-squares {
+                    display: flex;
+                    gap: 2px;
+                    margin: 0 4px;
+                }
+
+                .legend-square {
+                    width: 10px;
+                    height: 10px;
+                    border-radius: 2px;
+                    border: 1px solid var(--vscode-panel-border);
+                }
+
+                .legend-square.level-0 {
+                    background: var(--vscode-input-background);
+                }
+
+                .legend-square.level-1 {
+                    background: var(--vscode-gitDecoration-addedResourceForeground);
+                    opacity: 0.4;
+                }
+
+                .legend-square.level-2 {
+                    background: var(--vscode-gitDecoration-addedResourceForeground);
+                    opacity: 0.6;
+                }
+
+                .legend-square.level-3 {
+                    background: var(--vscode-gitDecoration-addedResourceForeground);
+                    opacity: 0.8;
+                }
+
+                .legend-square.level-4 {
+                    background: var(--vscode-gitDecoration-addedResourceForeground);
+                    opacity: 1;
+                }
+
+                .contribution-calendar {
+                    position: relative;
+                }
+
+                .month-labels {
+                    display: grid;
+                    grid-template-columns: repeat(12, 1fr);
+                    gap: 2px;
+                    margin-bottom: 8px;
+                    margin-left: 20px;
+                }
+
+                .month-label {
+                    font-size: 10px;
+                    color: var(--vscode-descriptionForeground);
+                    text-align: left;
+                }
+
+                .calendar-body {
+                    display: flex;
+                    gap: 4px;
+                }
+
+                .weekday-labels {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 2px;
+                    width: 16px;
+                }
+
+                .weekday-label {
+                    height: 10px;
+                    font-size: 9px;
+                    color: var(--vscode-descriptionForeground);
+                    display: flex;
+                    align-items: center;
+                    line-height: 1;
+                }
+
+                .contribution-grid {
+                    display: flex;
+                    gap: 2px;
+                    flex: 1;
+                }
+
+                .contribution-week {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 2px;
+                }
+
+                .contribution-day {
+                    width: 10px;
+                    height: 10px;
+                    border-radius: 2px;
+                    border: 1px solid transparent;
+                    cursor: pointer;
+                    transition: all 0.1s ease;
+                }
+
+                .contribution-day:hover {
+                    border-color: var(--vscode-focusBorder);
+                    transform: scale(1.1);
+                }
+
+                .contribution-day.inactive {
+                    opacity: 0.3;
+                }
+
+                .contribution-day.level-0 {
+                    background: var(--vscode-input-background);
+                    border-color: var(--vscode-panel-border);
+                }
+
+                .contribution-day.level-1 {
+                    background: var(--vscode-gitDecoration-addedResourceForeground);
+                    opacity: 0.4;
+                }
+
+                .contribution-day.level-2 {
+                    background: var(--vscode-gitDecoration-addedResourceForeground);
+                    opacity: 0.6;
+                }
+
+                .contribution-day.level-3 {
+                    background: var(--vscode-gitDecoration-addedResourceForeground);
+                    opacity: 0.8;
+                }
+
+                .contribution-day.level-4 {
+                    background: var(--vscode-gitDecoration-addedResourceForeground);
+                    opacity: 1;
+                }
+
+                /* People and Gists Styles */
+                .people-tabs {
+                    display: flex;
+                    gap: var(--spacing-2);
+                    margin-bottom: var(--spacing-6);
+                    background: var(--color-canvas-subtle);
+                    border: 1px solid var(--color-border-default);
+                    border-radius: var(--border-radius-medium);
+                    padding: var(--spacing-1);
+                }
+
+                .people-tab {
+                    background: transparent;
+                    border: none;
+                    color: var(--color-fg-muted);
+                    padding: var(--spacing-3) var(--spacing-4);
+                    cursor: pointer;
+                    border-radius: var(--border-radius-small);
+                    font-weight: 600;
+                    font-size: var(--font-size-normal);
+                    transition: var(--transition-fast);
+                    display: flex;
+                    align-items: center;
+                    gap: var(--spacing-2);
+                    flex: 1;
+                    justify-content: center;
+                }
+
+                .people-tab:hover {
+                    background: var(--color-canvas-default);
+                    color: var(--color-fg-default);
+                }
+
+                .people-tab.active {
+                    background: var(--color-accent-emphasis);
+                    color: var(--color-canvas-default);
+                    box-shadow: var(--shadow-small);
+                }
+
+                .people-section {
+                    display: none;
+                }
+
+                .people-section.active {
+                    display: block;
+                }
+
+                .people-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+                    gap: var(--spacing-4);
+                }
+
+                .person-card {
+                    background: var(--color-canvas-default);
+                    border: 1px solid var(--color-border-default);
+                    border-radius: var(--border-radius-large);
+                    padding: var(--spacing-5);
+                    text-align: center;
+                    transition: var(--transition-normal);
+                    cursor: pointer;
+                    box-shadow: var(--shadow-medium);
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: var(--spacing-3);
+                }
+
+                .person-card:hover {
+                    border-color: var(--color-accent-emphasis);
+                    transform: translateY(-2px);
+                    box-shadow: var(--shadow-large);
+                }
+
+                .person-avatar {
+                    width: 60px;
+                    height: 60px;
+                    border-radius: 50%;
+                    border: 2px solid var(--color-border-default);
+                    transition: var(--transition-fast);
+                }
+
+                .person-card:hover .person-avatar {
+                    border-color: var(--color-accent-emphasis);
+                }
+
+                .person-info {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: var(--spacing-1);
+                }
+
+                .person-name {
+                    font-size: var(--font-size-normal);
+                    font-weight: 600;
+                    color: var(--color-fg-default);
+                    margin: 0;
+                }
+
+                .person-type {
+                    font-size: var(--font-size-small);
+                    color: var(--color-fg-muted);
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                    font-weight: 500;
+                }
+
+                .visibility-badge {
+                    padding: var(--spacing-1) var(--spacing-2);
+                    border-radius: var(--border-radius-small);
+                    font-size: var(--font-size-small);
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                }
+
+                .visibility-badge.public {
+                    background: var(--color-success-subtle);
+                    color: var(--color-success-fg);
+                    border: 1px solid var(--color-success-muted);
+                }
+
+                .visibility-badge.private {
+                    background: var(--color-attention-subtle);
+                    color: var(--color-attention-fg);
+                    border: 1px solid var(--color-attention-muted);
+                }
+
+                .empty-state {
+                    text-align: center;
+                    padding: var(--spacing-8);
+                    color: var(--color-fg-muted);
+                }
+
+                .empty-icon {
+                    font-size: 48px;
+                    margin-bottom: var(--spacing-4);
+                    opacity: 0.6;
+                }
+
+                .empty-state h3 {
+                    font-size: var(--font-size-xl);
+                    font-weight: 600;
+                    color: var(--color-fg-default);
+                    margin: 0 0 var(--spacing-2) 0;
+                }
+
+                .empty-state p {
+                    font-size: var(--font-size-normal);
+                    color: var(--color-fg-muted);
+                    margin: 0;
+                    max-width: 400px;
+                    margin-left: auto;
+                    margin-right: auto;
+                    line-height: 1.5;
                 }
 
                 /* Responsive Design */
                 @media (max-width: 1024px) {
                     .container {
-                        padding: 1.5rem;
+                        padding: var(--spacing-5);
                     }
                     
                     .header {
                         flex-direction: column;
                         text-align: center;
-                        gap: 2rem;
+                        gap: var(--spacing-6);
                     }
                     
                     .grid {
                         grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-                        gap: 1.25rem;
+                        gap: var(--spacing-4);
                     }
                     
                     .filters {
@@ -2105,27 +2657,27 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     
                     .right {
                         margin-left: 0;
-                        margin-top: 1rem;
+                        margin-top: var(--spacing-4);
                     }
                 }
 
                 @media (max-width: 768px) {
                     .container {
-                        padding: 1rem;
+                        padding: var(--spacing-3);
                     }
                     
                     .title {
-                        font-size: 2rem;
+                        font-size: var(--font-size-2xl);
                     }
                     
                     .stats {
                         grid-template-columns: repeat(2, 1fr);
-                        gap: 1rem;
+                        gap: var(--spacing-3);
                     }
                     
                     .grid {
                         grid-template-columns: 1fr;
-                        gap: 1rem;
+                        gap: var(--spacing-3);
                     }
                     
                     .tabs {
@@ -2153,7 +2705,7 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     width: 20px;
                     height: 20px;
                     margin: -10px 0 0 -10px;
-                    border: 2px solid var(--vscode-focus-border);
+                    border: 2px solid var(--color-accent-emphasis);
                     border-top: 2px solid transparent;
                     border-radius: 50%;
                     animation: spin 1s linear infinite;
@@ -2169,7 +2721,7 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                 .primary-btn:focus,
                 .input:focus,
                 .select:focus {
-                    outline: 2px solid var(--vscode-focus-border);
+                    outline: 2px solid var(--color-accent-emphasis);
                     outline-offset: 2px;
                 }
 
@@ -2198,7 +2750,7 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                                 <div class="title">${userData.name || userData.login}</div>
                                 <div class="subtitle">${userData.login}</div>
                             </div>
-                            <button id="createRepoBtn" class="primary-btn"><span class="codicon codicon-repo"></span> New</button>
+                            <button id="createRepoBtn" class="primary-btn"><span class="codicon codicon-repo"></span> New Repo</button>
                         </div>
                         <div class="bio">${userData.bio || ''}</div>
                         <div class="stats">
@@ -2226,6 +2778,7 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     <button class="tab active" data-tab="overview">Overview</button>
                     <button class="tab" data-tab="repositories">Repositories <span class="count" id="repoCount">${repositories.length}</span></button>
                     <button class="tab" data-tab="stars">Stars <span class="count" id="starCount">${starredRepos.length}</span></button>
+                    <button class="tab" data-tab="activity">Activity</button>
                 </div>
 
                 <section id="overview" class="section active">
@@ -2243,11 +2796,11 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                             <div class="heatmap-legend">
                                 <span class="legend-text">Less</span>
                                 <div class="legend-squares">
-                                    <div class="legend-square" style="background: var(--gray-200);"></div>
-                                    <div class="legend-square" style="background: #9be9a8;"></div>
-                                    <div class="legend-square" style="background: #40c463;"></div>
-                                    <div class="legend-square" style="background: #30a14e;"></div>
-                                    <div class="legend-square" style="background: #216e39;"></div>
+                                    <div class="legend-square" style="background: var(--color-canvas-subtle);"></div>
+                                    <div class="legend-square" style="background: #0e4429;"></div>
+                                    <div class="legend-square" style="background: #006d32;"></div>
+                                    <div class="legend-square" style="background: #26a641;"></div>
+                                    <div class="legend-square" style="background: #39d353;"></div>
                                 </div>
                                 <span class="legend-text">More</span>
                             </div>
@@ -2290,6 +2843,37 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     </div>
                     <div class="grid" id="starGrid"></div>
                 </section>
+
+                <section id="activity" class="section">
+                    <div class="section-title">
+                        <span class="codicon codicon-pulse"></span>
+                        Activity Overview
+                    </div>
+                    
+                    <div class="activity-grid">
+                        <div class="activity-card">
+                            <h3>Contribution Activity</h3>
+                            <div class="contribution-heatmap">
+                                ${generateEnhancedContributionGraph(commentActivity)}
+                            </div>
+                        </div>
+                        
+                        <div class="activity-stats">
+                            <div class="stat-card">
+                                <div class="stat-number">${recentEvents.length}</div>
+                                <div class="stat-label">Recent Events</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number">${recentPullRequests.length}</div>
+                                <div class="stat-label">Pull Requests</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number">${recentIssues.length}</div>
+                                <div class="stat-label">Issues</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </div>
 
             <script nonce="${nonce}">
@@ -2306,6 +2890,14 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     t.classList.add('active');
                     document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
                     document.getElementById(t.dataset.tab).classList.add('active');
+                }));
+
+                // People Tabs
+                document.querySelectorAll('.people-tab').forEach(t => t.addEventListener('click', () => {
+                    document.querySelectorAll('.people-tab').forEach(x => x.classList.remove('active'));
+                    t.classList.add('active');
+                    document.querySelectorAll('.people-section').forEach(s => s.classList.remove('active'));
+                    document.getElementById(t.dataset.peopleTab + '-section').classList.add('active');
                 }));
 
                 // Actions
@@ -2471,10 +3063,13 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                             vscode.postMessage({ command: 'starRepository', owner, repo });
                         }
                     } else if (action === 'delete') {
-                        if (confirm('Delete ' + owner + '/' + repo + '? This cannot be undone.')) {
-                            console.log('Deleting:', owner + '/' + repo);
-                            vscode.postMessage({ command: 'deleteRepository', owner, repo });
-                        }
+                        // Update button to show loading state
+                        target.disabled = true;
+                        target.innerHTML = '<span class="codicon codicon-loading codicon-modifier-spin"></span> Deleting...';
+                        target.style.opacity = '0.6';
+                        
+                        console.log('Deleting:', owner + '/' + repo);
+                        vscode.postMessage({ command: 'deleteRepository', owner, repo });
                     }
                 });
 
@@ -2491,10 +3086,39 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     }
                     if (msg.command === 'repoDeleted') {
                         const key = (msg.owner + '/' + msg.repo).toLowerCase();
+                        
+                        // Remove from repositories array
                         REPOS = msg.repositories || REPOS.filter(r => (r.owner.login + '/' + r.name).toLowerCase() !== key);
                         document.getElementById('repoCount').textContent = String(REPOS.length);
+                        
+                        // Update the UI immediately
                         applyFilters();
+                        
+                        // Show success message
+                        const notification = document.createElement('div');
+                        notification.className = 'success-notification';
+                        notification.textContent = 'Repository ' + msg.owner + '/' + msg.repo + ' deleted successfully';
+                        notification.style.cssText = 'position: fixed; top: 20px; right: 20px; background: var(--vscode-notificationsInfoIcon-foreground); color: var(--vscode-editor-background); padding: 12px 16px; border-radius: 4px; font-size: 12px; z-index: 1000; animation: slideIn 0.3s ease;';
+                        document.body.appendChild(notification);
+                        
+                        // Remove notification after 3 seconds
+                        setTimeout(() => {
+                            if (notification.parentNode) {
+                                notification.remove();
+                            }
+                        }, 3000);
+                        
                         console.log('Repository deleted successfully:', key);
+                    }
+                    if (msg.command === 'deleteError') {
+                        // Re-enable delete buttons and show error
+                        document.querySelectorAll('.icon-btn[data-action="delete"]').forEach(btn => {
+                            if (btn.dataset.owner === msg.owner && btn.dataset.repo === msg.repo) {
+                                btn.disabled = false;
+                                btn.innerHTML = '<span class="codicon codicon-trash"></span> Delete';
+                                btn.style.opacity = '1';
+                            }
+                        });
                     }
                 });
 

@@ -2699,14 +2699,17 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
 
                 .repo-actions {
                     display: flex;
-                    align-items: flex-start;
+                    /* Center buttons vertically so icon + text sit aligned */
+                    align-items: center;
                     gap: 8px;
                     margin-left: 16px;
                 }
 
                 .btn {
                     position: relative;
-                    display: inline-block;
+                    display: inline-flex; /* allow flex centering of icon + text */
+                    align-items: center;
+                    justify-content: center;
                     padding: 5px 16px;
                     font-size: 14px;
                     font-weight: 500;
@@ -2736,6 +2739,13 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     color: var(--color-fg-on-emphasis);
                     background-color: var(--color-accent-emphasis);
                     border-color: var(--color-accent-emphasis);
+                }
+
+                /* Normalize icon alignment inside buttons */
+                .btn svg {
+                    display: inline-block;
+                    vertical-align: middle;
+                    margin-top: -1px; /* optical alignment tweak */
                 }
 
                 .btn-danger {
@@ -2808,7 +2818,8 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
 
                 .starred-repo-actions {
                     display: flex;
-                    align-items: flex-start;
+                    /* Center buttons vertically so icon + text sit aligned */
+                    align-items: center;
                     gap: 8px;
                     margin-left: 16px;
                 }
@@ -3781,7 +3792,7 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     const key = owner + '/' + repo;
                     const isStarred = starredSet.has(key);
                     return '<button class="btn btn-sm btn-outline" data-action="toggle-star" data-owner="' + owner + '" data-repo="' + repo + '" type="button">' +
-                           '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">' +
+                           '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right:4px;">' +
                                '<path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.279l4.21-.612L7.327.668A.75.75 0 018 .25z"></path>' +
                            '</svg> ' + (isStarred ? 'Unstar' : 'Star') + '</button>';
                 }
@@ -3789,7 +3800,7 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                 function deleteButton(owner, repo){
                     if (owner !== USER_LOGIN) return '';
                     return '<button class="btn btn-sm btn-danger" data-action="delete" data-owner="' + owner + '" data-repo="' + repo + '" type="button">' +
-                           '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">' +
+                           '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right:4px;">' +
                                '<path d="M6.5 1.75a.25.25 0 01.25-.25h2.5a.25.25 0 01.25.25V3h-3V1.75zm4.5 0V3h2.25a.75.75 0 010 1.5H2.75a.75.75 0 010-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75zM4.496 6.675a.75.75 0 10-1.492.15l.66 6.6A1.75 1.75 0 005.405 15h5.19c.9 0 1.652-.681 1.741-1.576l.66-6.6a.75.75 0 00-1.492-.149l-.66 6.6a.25.25 0 01-.249.225h-5.19a.25.25 0 01-.249-.225l-.66-6.6z"></path>' +
                            '</svg> Delete</button>';
                 }

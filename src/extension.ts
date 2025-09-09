@@ -1178,8 +1178,29 @@ export function activate(context: vscode.ExtensionContext) {
                                 // Handle messages from the repository explorer
                                 repoPanel.webview.onDidReceiveMessage(async (message) => {
                                     if (message.command === 'openFile') {
+                                        // Only try to open actual files, not directories
+                                        if (message.type && message.type === 'folder') {
+                                            console.log('Ignoring folder click:', message.path);
+                                            return;
+                                        }
+                                        
                                         try {
                                             console.log('Fetching file content for:', message.path);
+                                            
+                                            // First check if this is actually a file by looking at the tree data
+                                            const isFile = treeResponse.data.tree.find((item: any) => 
+                                                item.path === message.path && item.type === 'blob'
+                                            );
+                                            
+                                            if (!isFile) {
+                                                console.log('Path is not a file:', message.path);
+                                                repoPanel.webview.postMessage({
+                                                    command: 'showError',
+                                                    error: 'This is a directory, not a file. Click on files inside the directory to view their content.'
+                                                });
+                                                return;
+                                            }
+                                            
                                             const fileResponse = await octokit.repos.getContent({
                                                 owner,
                                                 repo,
@@ -1849,24 +1870,152 @@ function getLanguageFromExtension(filePath: string): string {
 function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, tree: any[], webview: vscode.Webview): string {
     const nonce = getNonce();
     
-    // Organize files by directory
-    const fileStructure: { [key: string]: any[] } = {};
-    const rootFiles: any[] = [];
-    
-    tree.forEach(item => {
-        if (item.type === 'blob') {
+    // Ultra-simple tree structure: just root level items
+    const createBasicTreeStructure = (items: any[]) => {
+        console.log('=== HIERARCHICAL TREE CREATION ===');
+        console.log('Processing', items.length, 'items');
+
+        const root: any = { children: new Map() };
+
+        // Build the tree structure
+        items.forEach((item: any) => {
             const pathParts = item.path.split('/');
-            if (pathParts.length === 1) {
-                rootFiles.push(item);
-            } else {
-                const dir = pathParts[0];
-                if (!fileStructure[dir]) {
-                    fileStructure[dir] = [];
+            let currentNode = root;
+
+            // Navigate/create the path
+            pathParts.forEach((part: string, index: number) => {
+                if (!currentNode.children.has(part)) {
+                    currentNode.children.set(part, {
+                        name: part,
+                        path: pathParts.slice(0, index + 1).join('/'),
+                        type: index === pathParts.length - 1 ? 
+                            (item.type === 'blob' ? 'file' : 'folder') : 'folder',
+                        size: item.size,
+                        sha: item.sha,
+                        children: new Map()
+                    });
                 }
-                fileStructure[dir].push(item);
+                currentNode = currentNode.children.get(part);
+            });
+        });
+
+        // Convert Map structure to array structure
+        const convertToArray = (node: any): any => {
+            const result: any = {
+                name: node.name,
+                path: node.path,
+                type: node.type,
+                size: node.size,
+                sha: node.sha,
+                children: []
+            };
+
+            if (node.children && node.children.size > 0) {
+                // Convert Map to Array and sort
+                const childrenArray = Array.from(node.children.values())
+                    .map((child: any) => convertToArray(child))
+                    .sort((a: any, b: any) => {
+                        // Folders first, then files
+                        if (a.type !== b.type) {
+                            return a.type === 'folder' ? -1 : 1;
+                        }
+                        return a.name.localeCompare(b.name);
+                    });
+                
+                result.children = childrenArray;
             }
-        }
-    });
+
+            return result;
+        };
+
+        // Get root level items
+        const rootItems = Array.from(root.children.values())
+            .map(child => convertToArray(child))
+            .sort((a: any, b: any) => {
+                if (a.type !== b.type) {
+                    return a.type === 'folder' ? -1 : 1;
+                }
+                return a.name.localeCompare(b.name);
+            });
+
+        console.log('Root items:', rootItems.length);
+        console.log('Tree structure built successfully');
+        console.log('Root items preview:', rootItems.slice(0, 3).map(item => ({
+            name: item.name, 
+            type: item.type, 
+            path: item.path, 
+            childrenCount: item.children ? item.children.length : 0
+        })));
+
+        return {
+            rootItems
+        };
+    };
+    
+    const treeStructure = createBasicTreeStructure(tree);
+    
+    // Ultra-simple tree rendering
+    const renderBasicTree = (structure: any): string => {
+        console.log('=== BASIC TREE RENDERING ===');
+        
+        // Recursive function to render tree items
+        const renderTreeItem = (item: any, depth: number): string => {
+            const indent = depth * 20 + 16;
+            const dataType = item.type === 'file' ? 'file' : 'folder';
+            const folderId = item.type === 'folder' ? item.path.replace(/[^a-zA-Z0-9]/g, '_') : '';
+            
+            let html = '<div class="tree-item-container">';
+            
+            // Render the item button
+            html += `<button class="tree-item ${dataType}" data-path="${item.path}" data-type="${dataType}" data-folder-name="${folderId}" style="padding-left: ${indent}px;">`;
+            html += '<span class="tree-icon"></span>' + item.name;
+            html += '</button>';
+            
+            // If it's a folder with children, render the children container
+            if (item.type === 'folder' && item.children && item.children.length > 0) {
+                html += `<div class="folder-children" id="folder-${folderId}">`;
+                
+                // Sort children: folders first, then files
+                const sortedChildren = item.children.sort((a: any, b: any) => {
+                    if (a.type !== b.type) {
+                        return a.type === 'folder' ? -1 : 1;
+                    }
+                    return a.name.localeCompare(b.name);
+                });
+                
+                // Recursively render children
+                sortedChildren.forEach((child: any) => {
+                    html += renderTreeItem(child, depth + 1);
+                });
+                
+                html += '</div>';
+            }
+            
+            html += '</div>';
+            return html;
+        };
+        
+        let html = '';
+        
+        // Sort root items: folders first, then files
+        const sortedRootItems = structure.rootItems.sort((a: any, b: any) => {
+            if (a.type !== b.type) {
+                return a.type === 'folder' ? -1 : 1;
+            }
+            return a.name.localeCompare(b.name);
+        });
+        
+        sortedRootItems.forEach((item: any) => {
+            html += renderTreeItem(item, 0);
+        });
+
+        console.log('Generated HTML length:', html.length);
+        console.log('Generated HTML preview:', html.substring(0, 1000));
+        console.log('Number of tree-item buttons:', (html.match(/class="tree-item/g) || []).length);
+        console.log('Number of folder-children divs:', (html.match(/class="folder-children"/g) || []).length);
+        console.log('=== END BASIC TREE RENDERING ===');
+        return html;
+    };
 
     return `
         <!DOCTYPE html>
@@ -1903,7 +2052,7 @@ function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, t
                     padding: 0;
                     background: var(--color-canvas-default);
                     color: var(--color-fg-default);
-                    overflow: hidden;
+                    height: 100vh;
                 }
                 
                 .container {
@@ -1995,6 +2144,7 @@ function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, t
                     align-items: center;
                     justify-content: center;
                     font-size: 14px;
+                    flex-shrink: 0;
                 }
                 
                 .tree-item.folder .tree-icon::before {
@@ -2009,21 +2159,36 @@ function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, t
                     content: "📄";
                 }
                 
-                .folder-children {
-                    display: none;
-                    margin-left: 24px;
-                }
-                
-                .folder-children.expanded {
+                .tree-node {
                     display: block;
                 }
                 
-                .folder-children .tree-item {
-                    padding-left: 40px;
+                .tree-item-container {
+                    display: block;
                 }
-                
-                .tree-item.folder.expanded .tree-icon::before {
-                    content: "📂";
+
+                .folder-children {
+                    display: none;
+                    margin-left: 16px;
+                    border-left: 1px solid var(--color-border-muted);
+                    padding-left: 8px;
+                }
+
+                .folder-children.show {
+                    display: block;
+                }
+
+                .tree-item.folder::after {
+                    content: "▶";
+                    margin-left: 8px;
+                    font-size: 12px;
+                    color: var(--color-fg-muted);
+                    transition: transform 0.2s ease;
+                }
+
+                .tree-item.folder.expanded::after {
+                    content: "▼";
+                    transform: rotate(0deg);
                 }
                 
                 .main-content {
@@ -2031,6 +2196,7 @@ function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, t
                     display: flex;
                     flex-direction: column;
                     background: var(--color-canvas-default);
+                    overflow: hidden;
                 }
                 
                 .file-header {
@@ -2053,6 +2219,7 @@ function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, t
                     flex: 1;
                     overflow: auto;
                     background: var(--color-canvas-default);
+                    height: calc(100vh - 60px);
                 }
                 
                 .file-content {
@@ -2060,13 +2227,15 @@ function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, t
                     font-family: SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;
                     font-size: 12px;
                     line-height: 1.45;
-                    white-space: pre;
-                    overflow: auto;
+                    white-space: pre-wrap;
+                    word-wrap: break-word;
                     background: var(--color-canvas-default);
                     color: var(--color-fg-default);
                     border: 1px solid var(--color-border-default);
                     border-radius: 6px;
                     margin: 16px;
+                    overflow: auto;
+                    max-height: calc(100vh - 120px);
                 }
                 
                 .line-numbers {
@@ -2170,26 +2339,7 @@ function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, t
                         </div>
                     </div>
                     <div class="file-tree">
-                        ${rootFiles.map(file => `
-                            <button class="tree-item file" data-path="${file.path}" data-type="file">
-                                <span class="tree-icon"></span>
-                                ${file.path}
-                            </button>
-                        `).join('')}
-                        ${Object.keys(fileStructure).map(dir => `
-                            <button class="tree-item folder" data-path="${dir}" data-type="folder">
-                                <span class="tree-icon"></span>
-                                ${dir}
-                            </button>
-                            <div class="folder-children" data-folder="${dir}">
-                                ${fileStructure[dir].map(file => `
-                                    <button class="tree-item file" data-path="${file.path}" data-type="file">
-                                        <span class="tree-icon"></span>
-                                        ${file.path.split('/').pop()}
-                                    </button>
-                                `).join('')}
-                            </div>
-                        `).join('')}
+                        ${renderBasicTree(treeStructure)}
                     </div>
                 </div>
                 <div class="main-content">
@@ -2212,14 +2362,14 @@ function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, t
                     console.log('DOM Content Loaded - Setting up event listeners');
                     setupEventListeners();
                 });
-                
+
                 // Also try to set up immediately in case DOMContentLoaded already fired
                 if (document.readyState === 'loading') {
                     document.addEventListener('DOMContentLoaded', setupEventListeners);
                 } else {
                     setupEventListeners();
                 }
-                
+
                 function setupEventListeners() {
                     console.log('Setting up event listeners');
                     const fileTree = document.querySelector('.file-tree');
@@ -2227,52 +2377,117 @@ function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, t
                         console.error('File tree not found');
                         return;
                     }
-                    
-                    // Use event delegation for better performance and reliability
-                    fileTree.addEventListener('click', function(event) {
-                        const target = event.target.closest('.tree-item');
-                        if (!target) return;
-                        
-                        const path = target.getAttribute('data-path');
-                        const type = target.getAttribute('data-type');
-                        
-                        console.log('Clicked item:', { path, type, target });
-                        
-                        if (type === 'folder') {
-                            toggleFolder(target, event);
-                        } else if (type === 'file') {
-                            openFile(path, target);
-                        }
+
+                    // Log the initial tree structure
+                    try {
+                        console.log('File tree HTML:', fileTree.innerHTML.substring(0, 500) + '...');
+                    } catch (e) {
+                        console.log('Could not read file tree innerHTML');
+                    }
+                    console.log('Tree items found:', document.querySelectorAll('.tree-item').length);
+                    console.log('Folder items found:', document.querySelectorAll('.tree-item.folder').length);
+                    console.log('File items found:', document.querySelectorAll('.tree-item.file').length);
+                    console.log('Folder children divs found:', document.querySelectorAll('.folder-children').length);
+
+                    // Attach direct click handlers to each rendered button to avoid delegation edge cases
+                    attachClickHandlers();
+                }
+
+                function attachClickHandlers() {
+                    const buttons = Array.from(document.querySelectorAll('.tree-item'));
+                    console.log('Attaching click handlers to', buttons.length, 'tree-item buttons');
+                    buttons.forEach(btn => {
+                        // Avoid adding duplicate listeners
+                        // don't use TypeScript-only casts inside the emitted webview script
+                        if (btn && btn.__hasTreeHandler) return;
+                        try { btn.__hasTreeHandler = true; } catch (e) { /* ignore */ }
+
+                        btn.addEventListener('click', (e) => {
+                            try {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const path = btn.getAttribute('data-path');
+                                const type = btn.getAttribute('data-type');
+                                const folderName = btn.getAttribute('data-folder-name');
+                                console.log('tree-item clicked', { path, type, folderName });
+                                if (type === 'folder') {
+                                    toggleFolder(btn);
+                                } else if (type === 'file') {
+                                    openFile(path, btn);
+                                }
+                            } catch (err) {
+                                console.error('Error in tree-item click handler:', err);
+                            }
+                        });
                     });
                 }
                 
                 function toggleFolder(element, event) {
-                    event.stopPropagation();
-                    console.log('Toggling folder:', element);
-                    
-                    const folderPath = element.getAttribute('data-path');
-                    element.classList.toggle('expanded');
-                    
-                    // Find the corresponding folder-children div
-                    const folderChildren = document.querySelector(\`[data-folder="\${folderPath}"]\`);
-                    
-                    if (folderChildren) {
-                        if (element.classList.contains('expanded')) {
-                            folderChildren.classList.add('expanded');
-                            folderChildren.style.display = 'block';
-                            console.log('Expanded folder:', folderPath);
+                    if (event) {
+                        try { event.stopPropagation(); } catch (e) {}
+                        try { event.preventDefault(); } catch (e) {}
+                    }
+
+                    console.log('=== FOLDER TOGGLE ===');
+
+                    const folderName = element.getAttribute('data-folder-name');
+                    console.log('Toggling folder:', folderName);
+
+                    if (!folderName) {
+                        console.error('No folder name found');
+                        return;
+                    }
+
+                    // Find the folder children div by ID
+                    const folderDiv = document.getElementById('folder-' + folderName);
+                    console.log('Looking for folder div with id:', 'folder-' + folderName);
+                    console.log('Found folder div:', !!folderDiv);
+
+                    if (folderDiv) {
+                        // Use classList to toggle visibility reliably
+                        const isShown = folderDiv.classList.contains('show');
+                        if (!isShown) {
+                            folderDiv.classList.add('show');
+                            element.classList.add('expanded');
+                            console.log('✅ EXPANDED folder:', folderName);
                         } else {
-                            folderChildren.classList.remove('expanded');
-                            folderChildren.style.display = 'none';
-                            console.log('Collapsed folder:', folderPath);
+                            folderDiv.classList.remove('show');
+                            element.classList.remove('expanded');
+                            console.log('✅ COLLAPSED folder:', folderName);
                         }
                     } else {
-                        console.error('Could not find folder children for:', folderPath);
+                        console.error('❌ Could not find folder div for:', folderName);
+                        // Debug: list all folder divs
+                        const allFolders = document.querySelectorAll('[id^="folder-"]');
+                        console.log('Available folder divs:', allFolders.length);
+                        allFolders.forEach(function(folder, index) {
+                            console.log('  ' + index + ': id="' + folder.id + '"');
+                        });
+
+                        // Try to find the element by different means
+                        const allElements = document.querySelectorAll('.folder-children');
+                        console.log('All .folder-children elements:', allElements.length);
+                        allElements.forEach(function(el, index) {
+                            try {
+                                console.log('  ' + index + ': id="' + el.id + '", display="' + el.style.display + '"');
+                            } catch (e) {
+                                console.log('  ' + index + ': id="' + el.id + '", display="(unavailable)"');
+                            }
+                        });
                     }
+
+                    console.log('=== END FOLDER TOGGLE ===');
                 }
                 
                 function openFile(path, element) {
-                    console.log('Opening file:', path);
+                    const type = element.getAttribute('data-type');
+                    console.log('Opening file:', path, 'Type:', type);
+                    
+                    // Don't open folders as files
+                    if (type === 'folder') {
+                        console.log('Ignoring folder click - should be handled by toggleFolder');
+                        return;
+                    }
                     
                     // Clear previous selection
                     if (activeElement) {
@@ -2284,16 +2499,16 @@ function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, t
                     activeElement = element;
                     
                     // Show loading
-                    document.getElementById('file-display').innerHTML = \`
-                        <div class="loading">
-                            <span>Loading \${path}...</span>
-                        </div>
-                    \`;
+                    document.getElementById('file-display').innerHTML = 
+                        '<div class="loading">' +
+                            '<span>Loading ' + path + '...</span>' +
+                        '</div>';
                     
-                    // Request file content
+                    // Request file content with type information
                     vscode.postMessage({
                         command: 'openFile',
-                        path: path
+                        path: path,
+                        type: type
                     });
                 }
                 
@@ -2304,28 +2519,42 @@ function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, t
                     
                     if (message.command === 'showFileContent') {
                         const lines = message.content.split('\\n');
-                        const numberedContent = lines.map((line, index) => 
-                            \`<span class="line-numbers">\${index + 1}</span>\${escapeHtml(line)}\`
-                        ).join('\\n');
+                        const numberedContent = lines.map(function(line, index) {
+                            return '<span class="line-numbers">' + (index + 1) + '</span>' + escapeHtml(line);
+                        }).join('\\n');
                         
-                        document.getElementById('file-display').innerHTML = \`
-                            <div class="file-header">
-                                <span class="file-icon">📄</span>
-                                <span>\${message.path}</span>
-                                <span style="margin-left: auto; color: var(--color-fg-muted); font-size: 12px;">
-                                    \${lines.length} lines • \${Math.round((message.size || 0) / 1024)} KB
-                                </span>
-                            </div>
-                            <div class="file-content-wrapper">
-                                <div class="file-content">\${numberedContent}</div>
-                            </div>
-                        \`;
+                        const fileDisplayElement = document.getElementById('file-display');
+                        if (fileDisplayElement) {
+                            fileDisplayElement.innerHTML = 
+                                '<div class="file-header">' +
+                                    '<span class="file-icon">📄</span>' +
+                                    '<span>' + message.path + '</span>' +
+                                    '<span style="margin-left: auto; color: var(--color-fg-muted); font-size: 12px;">' +
+                                        lines.length + ' lines • ' + Math.round((message.size || 0) / 1024) + ' KB' +
+                                    '</span>' +
+                                '</div>' +
+                                '<div class="file-content-wrapper">' +
+                                    '<div class="file-content">' + numberedContent + '</div>' +
+                                '</div>';
+                            
+                            // Ensure scrolling works by setting explicit height and overflow
+                            const contentWrapper = fileDisplayElement.querySelector('.file-content-wrapper');
+                            const content = fileDisplayElement.querySelector('.file-content');
+                            if (contentWrapper) {
+                                contentWrapper.style.height = 'calc(100vh - 120px)';
+                                contentWrapper.style.overflowY = 'auto';
+                                contentWrapper.style.overflowX = 'auto';
+                            }
+                            if (content) {
+                                content.style.maxHeight = 'none';
+                                content.style.overflow = 'visible';
+                            }
+                        }
                     } else if (message.command === 'showError') {
-                        document.getElementById('file-display').innerHTML = \`
-                            <div class="error">
-                                <strong>Error:</strong> \${message.error}
-                            </div>
-                        \`;
+                        document.getElementById('file-display').innerHTML = 
+                            '<div class="error">' +
+                                '<strong>Error:</strong> ' + message.error +
+                            '</div>';
                     }
                 });
                 

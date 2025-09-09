@@ -2025,297 +2025,18 @@ function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, t
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
             <title>${owner}/${repo}</title>
-            <style>
-                /* GitHub-like styling */
-                :root {
-                    --color-canvas-default: #0d1117;
-                    --color-canvas-subtle: #161b22;
-                    --color-border-default: #30363d;
-                    --color-border-muted: #21262d;
-                    --color-fg-default: #f0f6fc;
-                    --color-fg-muted: #8b949e;
-                    --color-fg-subtle: #656d76;
-                    --color-accent-fg: #58a6ff;
-                    --color-btn-primary-bg: #238636;
-                    --color-btn-primary-hover-bg: #2ea043;
-                }
-                
-                * {
-                    box-sizing: border-box;
-                }
-                
-                body {
-                    font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif;
-                    font-size: 14px;
-                    line-height: 1.5;
-                    margin: 0;
-                    padding: 0;
-                    background: var(--color-canvas-default);
-                    color: var(--color-fg-default);
-                    height: 100vh;
-                }
-                
-                .container {
-                    display: flex;
-                    height: 100vh;
-                    background: var(--color-canvas-default);
-                }
-                
-                .sidebar {
-                    width: 360px;
-                    border-right: 1px solid var(--color-border-default);
-                    background: var(--color-canvas-default);
-                    display: flex;
-                    flex-direction: column;
-                }
-                
-                .repo-header {
-                    padding: 16px;
-                    border-bottom: 1px solid var(--color-border-default);
-                    background: var(--color-canvas-subtle);
-                }
-                
-                .repo-title {
-                    font-size: 20px;
-                    font-weight: 600;
-                    margin: 0 0 4px 0;
-                    color: var(--color-accent-fg);
-                }
-                
-                .repo-description {
-                    color: var(--color-fg-muted);
-                    font-size: 14px;
-                    margin: 0;
-                }
-                
-                .repo-stats {
-                    display: flex;
-                    gap: 16px;
-                    margin-top: 8px;
-                    font-size: 12px;
-                    color: var(--color-fg-muted);
-                }
-                
-                .stat {
-                    display: flex;
-                    align-items: center;
-                    gap: 4px;
-                }
-                
-                .file-tree {
-                    flex: 1;
-                    overflow-y: auto;
-                    padding: 8px 0;
-                }
-                
-                .tree-item {
-                    display: flex;
-                    align-items: center;
-                    padding: 4px 16px;
-                    cursor: pointer;
-                    font-size: 14px;
-                    border: none;
-                    background: none;
-                    color: var(--color-fg-default);
-                    width: 100%;
-                    text-align: left;
-                    position: relative;
-                }
-                
-                .tree-item:hover {
-                    background: var(--color-canvas-subtle);
-                }
-                
-                .tree-item.active {
-                    background: var(--color-accent-fg);
-                    color: #fff;
-                    font-weight: 500;
-                }
-                
-                .tree-item.folder {
-                    font-weight: 500;
-                }
-                
-                .tree-icon {
-                    width: 16px;
-                    height: 16px;
-                    margin-right: 8px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: 14px;
-                    flex-shrink: 0;
-                }
-                
-                .tree-item.folder .tree-icon::before {
-                    content: "📁";
-                }
-                
-                .tree-item.folder.expanded .tree-icon::before {
-                    content: "📂";
-                }
-                
-                .tree-item.file .tree-icon::before {
-                    content: "📄";
-                }
-                
-                .tree-node {
-                    display: block;
-                }
-                
-                .tree-item-container {
-                    display: block;
-                }
-
-                .folder-children {
-                    display: none;
-                    margin-left: 16px;
-                    border-left: 1px solid var(--color-border-muted);
-                    padding-left: 8px;
-                }
-
-                .folder-children.show {
-                    display: block;
-                }
-
-                .tree-item.folder::after {
-                    content: "▶";
-                    margin-left: 8px;
-                    font-size: 12px;
-                    color: var(--color-fg-muted);
-                    transition: transform 0.2s ease;
-                }
-
-                .tree-item.folder.expanded::after {
-                    content: "▼";
-                    transform: rotate(0deg);
-                }
-                
-                .main-content {
-                    flex: 1;
-                    display: flex;
-                    flex-direction: column;
-                    background: var(--color-canvas-default);
-                    overflow: hidden;
-                }
-                
-                .file-header {
-                    padding: 12px 16px;
-                    border-bottom: 1px solid var(--color-border-default);
-                    background: var(--color-canvas-subtle);
-                    font-family: SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;
-                    font-size: 14px;
-                    font-weight: 600;
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                }
-                
-                .file-icon {
-                    color: var(--color-fg-muted);
-                }
-                
-                .file-content-wrapper {
-                    flex: 1;
-                    overflow: auto;
-                    background: var(--color-canvas-default);
-                    height: calc(100vh - 60px);
-                }
-                
-                .file-content {
-                    padding: 16px;
-                    font-family: SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;
-                    font-size: 12px;
-                    line-height: 1.45;
-                    white-space: pre-wrap;
-                    word-wrap: break-word;
-                    background: var(--color-canvas-default);
-                    color: var(--color-fg-default);
-                    border: 1px solid var(--color-border-default);
-                    border-radius: 6px;
-                    margin: 16px;
-                    overflow: auto;
-                    max-height: calc(100vh - 120px);
-                }
-                
-                .line-numbers {
-                    display: inline-block;
-                    width: 40px;
-                    color: var(--color-fg-subtle);
-                    text-align: right;
-                    margin-right: 16px;
-                    user-select: none;
-                    border-right: 1px solid var(--color-border-muted);
-                    padding-right: 8px;
-                }
-                
-                .welcome-screen {
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    height: 100%;
-                    text-align: center;
-                    color: var(--color-fg-muted);
-                    padding: 40px;
-                }
-                
-                .welcome-icon {
-                    font-size: 48px;
-                    margin-bottom: 16px;
-                    opacity: 0.6;
-                }
-                
-                .welcome-title {
-                    font-size: 20px;
-                    font-weight: 600;
-                    margin-bottom: 8px;
-                    color: var(--color-fg-default);
-                }
-                
-                .welcome-subtitle {
-                    font-size: 14px;
-                    color: var(--color-fg-muted);
-                }
-                
-                .loading {
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    height: 200px;
-                    color: var(--color-fg-muted);
-                    font-size: 14px;
-                }
-                
-                .error {
-                    color: #f85149;
-                    background: rgba(248, 81, 73, 0.1);
-                    border: 1px solid rgba(248, 81, 73, 0.2);
-                    border-radius: 6px;
-                    padding: 16px;
-                    margin: 16px;
-                    font-size: 14px;
-                }
-                
-                /* Scrollbar styling */
-                ::-webkit-scrollbar {
-                    width: 8px;
-                    height: 8px;
-                }
-                
-                ::-webkit-scrollbar-track {
-                    background: var(--color-canvas-default);
-                }
-                
-                ::-webkit-scrollbar-thumb {
-                    background: var(--color-border-default);
-                    border-radius: 4px;
-                }
-                
-                ::-webkit-scrollbar-thumb:hover {
-                    background: var(--color-fg-subtle);
-                }
-            </style>
+                        <link rel="stylesheet" href="${webview.asWebviewUri(vscode.Uri.joinPath(extensionContext.extensionUri,'resources','repo.css'))}">
+                        <style>
+                            /* Fallback / scroll assurance */
+                            html, body { height:100%; margin:0; }
+                            .container { height:100vh; display:flex; }
+                            .main-content { display:flex; flex-direction:column; flex:1; min-height:0; }
+                            #file-display { flex:1; min-height:0; overflow:auto; }
+                            .blob-wrapper { overflow:auto; max-height:none !important; }
+                            table { width:100%; border-collapse:separate; }
+                            .blob-num { white-space:nowrap; }
+                            .blob-code { white-space:pre; }
+                        </style>
         </head>
         <body>
             <div class="container">
@@ -2343,13 +2064,11 @@ function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, t
                     </div>
                 </div>
                 <div class="main-content">
-                    <div id="file-display">
-                        <div class="welcome-screen">
-                            <div class="welcome-icon">📁</div>
-                            <div class="welcome-title">${owner}/${repo}</div>
-                            <div class="welcome-subtitle">Select a file to view its contents</div>
-                        </div>
+                    <div class="file-toolbar">
+                        <div class="breadcrumbs" id="breadcrumbs"><span class="repo-root">${owner} / ${repo}</span></div>
+                        <div class="file-actions"><span class="branch-badge">${repoInfo.default_branch || 'main'}</span></div>
                     </div>
+                    <div id="file-display"></div>
                 </div>
             </div>
             
@@ -2519,36 +2238,21 @@ function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, t
                     
                     if (message.command === 'showFileContent') {
                         const lines = message.content.split('\\n');
-                        const numberedContent = lines.map(function(line, index) {
-                            return '<span class="line-numbers">' + (index + 1) + '</span>' + escapeHtml(line);
-                        }).join('\\n');
-                        
                         const fileDisplayElement = document.getElementById('file-display');
                         if (fileDisplayElement) {
-                            fileDisplayElement.innerHTML = 
-                                '<div class="file-header">' +
-                                    '<span class="file-icon">📄</span>' +
-                                    '<span>' + message.path + '</span>' +
-                                    '<span style="margin-left: auto; color: var(--color-fg-muted); font-size: 12px;">' +
-                                        lines.length + ' lines • ' + Math.round((message.size || 0) / 1024) + ' KB' +
-                                    '</span>' +
-                                '</div>' +
-                                '<div class="file-content-wrapper">' +
-                                    '<div class="file-content">' + numberedContent + '</div>' +
-                                '</div>';
-                            
-                            // Ensure scrolling works by setting explicit height and overflow
-                            const contentWrapper = fileDisplayElement.querySelector('.file-content-wrapper');
-                            const content = fileDisplayElement.querySelector('.file-content');
-                            if (contentWrapper) {
-                                contentWrapper.style.height = 'calc(100vh - 120px)';
-                                contentWrapper.style.overflowY = 'auto';
-                                contentWrapper.style.overflowX = 'auto';
-                            }
-                            if (content) {
-                                content.style.maxHeight = 'none';
-                                content.style.overflow = 'visible';
-                            }
+                            updateBreadcrumbs(message.path);
+                            const numberedRows = lines.map(function(line, i){
+                                return '<tr><td id="L'+(i+1)+'" class="blob-num">'+(i+1)+'</td><td class="blob-code"><span class="blob-code-inner">'+escapeHtml(line)+'</span></td></tr>';
+                            }).join('');
+                            fileDisplayElement.innerHTML = ''
+                              + '<div class="Box">'
+                              +   '<div class="Box-header">'
+                              +     '<span class="file-info">'+escapeHtml(message.path.split('/').pop()||'')+'</span>'
+                              +     '<span>'+lines.length+' lines ('+Math.round((message.size||0)/1024)+' KB)</span>'
+                              +     '<span style="margin-left:auto; color:var(--color-fg-muted);">UTF-8</span>'
+                              +   '</div>'
+                              +   '<div class="blob-wrapper"><table><tbody>'+numberedRows+'</tbody></table></div>'
+                              + '</div>';
                         }
                     } else if (message.command === 'showError') {
                         document.getElementById('file-display').innerHTML = 
@@ -2563,6 +2267,20 @@ function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, t
                     div.textContent = text;
                     return div.innerHTML;
                 }
+                function updateBreadcrumbs(path) {
+                    const bc = document.getElementById('breadcrumbs');
+                    if (!bc) return;
+                    const segments = path.split('/').filter(Boolean);
+                    let html = '<span class="repo-root">${owner} / ${repo}</span>';
+                    let accum = '';
+                    segments.forEach(seg => {
+                        accum = accum ? accum + '/' + seg : seg;
+                        html += ' <span class="sep">/</span> <span>'+escapeHtml(seg)+'</span>';
+                    });
+                    bc.innerHTML = html;
+                }
+                // Initial welcome
+                document.getElementById('file-display').innerHTML = '<div class="welcome-screen"><div class="welcome-icon">📁</div><div class="welcome-title">${owner}/${repo}</div><div class="welcome-subtitle">Select a file to view its contents</div></div>';
             </script>
         </body>
         </html>

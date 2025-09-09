@@ -15,6 +15,17 @@
   "categories": [
     "Other"
   ],
+      "keywords": [
+    "GitHub",
+    "Dashboard",
+    "Activity",
+    "Repositories",
+    "Profile",
+    "History",
+    "Starred Repos",
+    "Notifications",
+    "Profile Repositories"
+  ],
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {

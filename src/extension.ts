@@ -2423,13 +2423,19 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
 
                 .profile-bio {
                     font-size: 16px;
-                    margin-bottom: 16px;
+                    margin: 16px 0 20px;
                     color: var(--color-fg-default);
+                    padding: 8px 12px;
+                    background: var(--color-canvas-subtle);
+                    border: 1px solid var(--color-border-muted);
+                    border-radius: 6px;
                 }
 
                 .btn-primary {
-                    display: inline-block;
-                    padding: 5px 16px;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 8px 18px;
                     font-size: 14px;
                     font-weight: 500;
                     line-height: 20px;
@@ -2446,6 +2452,7 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     text-decoration: none;
                     width: 100%;
                     text-align: center;
+                    transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
                 }
 
                 .btn-primary:hover {
@@ -2454,7 +2461,36 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                 }
 
                 .profile-details {
-                    margin: 16px 0;
+                    margin: 8px 0 24px;
+                    padding: 8px 0;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 6px;
+                }
+
+                /* Responsive layout */
+                @media (max-width: 900px) {
+                    .profile-container {
+                        flex-direction: column;
+                    }
+                    .profile-sidebar {
+                        width: 100%;
+                        max-width: 100%;
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                    }
+                    .avatar { width: 200px; height: 200px; }
+                    .profile-name { font-size: 22px; }
+                    .profile-login { font-size: 18px; }
+                    .btn-primary { width: auto; min-width: 220px; }
+                    .profile-bio { width: 100%; }
+                }
+
+                @media (max-width: 600px) {
+                    .repo-filters { flex-direction: column; align-items: stretch; }
+                    .form-control { width: 100%; }
+                    .btn-primary { width: 100%; }
                 }
 
                 .profile-detail {

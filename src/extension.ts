@@ -2584,6 +2584,7 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     border-radius: 6px;
                     outline: none;
                     box-shadow: inset 0 1px 0 rgba(208,215,222,0.2);
+                    width: 320px; /* widen search input */
                 }
 
                 .form-control:focus {
@@ -2593,11 +2594,11 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                 }
 
                 .form-select {
-                    padding-right: 20px;
+                    padding-right: 28px; /* more room so arrow doesn't overlap text */
                     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23e6edf3' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m1 6 7 7 7-7'/%3e%3c/svg%3e");
                     background-repeat: no-repeat;
                     background-position: right 8px center;
-                    background-size: 16px 12px;
+                    background-size: 14px 10px; /* slightly smaller to avoid text overlap */
                     appearance: none;
                 }
 

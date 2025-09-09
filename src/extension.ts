@@ -5,6 +5,23 @@ import { getCreateRepoWebviewContent, getRepoExplorerWebviewContent } from './cr
 
 // Global variables to track panels
 let activeProfilePanel: vscode.WebviewPanel | undefined;
+
+// --- Global Loader Broadcast Utilities ---
+// These functions send loader show/hide messages to the active profile webview so
+// that a unified overlay spinner can appear during any long-running command.
+let __globalLoaderDepth = 0;
+function showExtensionGlobalLoader(text: string = 'Loading...') {
+    __globalLoaderDepth++;
+    if (activeProfilePanel) {
+        try { activeProfilePanel.webview.postMessage({ command: 'globalLoader', action: 'show', text }); } catch {}
+    }
+}
+function hideExtensionGlobalLoader(force = false) {
+    if (force) __globalLoaderDepth = 0; else __globalLoaderDepth = Math.max(0, __globalLoaderDepth - 1);
+    if (__globalLoaderDepth === 0 && activeProfilePanel) {
+        try { activeProfilePanel.webview.postMessage({ command: 'globalLoader', action: 'hide' }); } catch {}
+    }
+}
 let extensionContext: vscode.ExtensionContext;
 
 class GitHubActivityProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
@@ -814,23 +831,33 @@ export function activate(context: vscode.ExtensionContext) {
                             }
                         } catch (e) { console.log('Homepage update failed', e); }
                         vscode.window.showInformationMessage(`Successfully created repository "${message.repoName}"`);
-                        
-                        // Refresh the providers
+                        // Refresh tree data providers
                         githubRepoProvider.refresh();
                         githubProfileReposProvider.refresh();
-                        
-                        // Trigger profile refresh via command if profile is open
-                        console.log('Repository created, trying to refresh profile. ActiveProfilePanel exists:', !!activeProfilePanel, 'Visible:', activeProfilePanel?.visible);
-                        vscode.commands.executeCommand('github-activity-dashboard.refreshProfile', {
-                            type: 'repoCreated',
-                            repoName: message.repoName
-                        });
-                        // Show success instructions instead of closing panel
+
+                        // Automatically redirect user to the profile panel and show new repo
                         try {
-                            panel.webview.postMessage({ command: 'creationSuccess', repo: response.data });
+                            if (activeProfilePanel) {
+                                console.log('Revealing existing profile panel after repo creation');
+                                activeProfilePanel.reveal(vscode.ViewColumn.One);
+                                vscode.commands.executeCommand('github-activity-dashboard.refreshProfile', {
+                                    type: 'repoCreated',
+                                    repoName: message.repoName
+                                });
+                            } else {
+                                console.log('Opening profile panel after repo creation');
+                                await vscode.commands.executeCommand('github-activity-dashboard.openProfile');
+                                vscode.commands.executeCommand('github-activity-dashboard.refreshProfile', {
+                                    type: 'repoCreated',
+                                    repoName: message.repoName
+                                });
+                            }
                         } catch (e) {
-                            console.log('Could not post creationSuccess message', e);
+                            console.log('Error redirecting to profile after creation', e);
                         }
+
+                        // Close the create repo panel since we redirect
+                        try { panel.dispose(); } catch {}
                     } catch (error: any) {
                         vscode.window.showErrorMessage(`Failed to create repository: ${error.message}`);
                         panel.webview.postMessage({ command: 'creationFailed' });
@@ -1182,51 +1209,36 @@ export function activate(context: vscode.ExtensionContext) {
                             vscode.commands.executeCommand('github-activity-dashboard.createRepo');
                             break;
                         case 'openRepo':
+                            showExtensionGlobalLoader('Opening repository...');
                             try {
                                 const owner = message.owner;
                                 const repo = message.repo;
                                 console.log(`Opening repository explorer for: ${owner}/${repo}`);
 
-                                // Create a new webview panel for repository exploration
                                 const repoPanel = vscode.window.createWebviewPanel(
                                     'repoExplorer',
                                     `📁 ${owner}/${repo}`,
                                     vscode.ViewColumn.One,
-                                    {
-                                        enableScripts: true
-                                    }
+                                    { enableScripts: true }
                                 );
 
-                                // Fetch repository content from GitHub API
                                 const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
                                 const octokit = new Octokit({ auth: session.accessToken });
-
-                                // Get repository info and default branch
                                 const repoInfo = await octokit.repos.get({ owner, repo });
                                 const defaultBranch = repoInfo.data.default_branch;
-
-                                // Get repository tree structure
-                                const treeResponse = await octokit.git.getTree({
-                                    owner,
-                                    repo,
-                                    tree_sha: defaultBranch,
-                                    recursive: "1"
-                                });
-
-                                // Generate repository explorer HTML
+                                const treeResponse = await octokit.git.getTree({ owner, repo, tree_sha: defaultBranch, recursive: "1" });
                                 repoPanel.webview.html = getRepositoryExplorerHTML(owner, repo, repoInfo.data, treeResponse.data.tree, repoPanel.webview);
+                                hideExtensionGlobalLoader();
 
                                 // Handle messages from the repository explorer
                                 repoPanel.webview.onDidReceiveMessage(async (message) => {
                                     if (message.command === 'openFile') {
+                                        try {
                                         // Only try to open actual files, not directories
                                         if (message.type && message.type === 'folder') {
                                             console.log('Ignoring folder click:', message.path);
                                             return;
                                         }
-                                        
-                                        try {
-                                            console.log('Fetching file content for:', message.path);
                                             
                                             // First check if this is actually a file by looking at the tree data
                                             const isFile = treeResponse.data.tree.find((item: any) => 
@@ -1277,6 +1289,7 @@ export function activate(context: vscode.ExtensionContext) {
 
                             } catch (error: any) {
                                 console.error('Error in "openRepo" message handler:', error);
+                                hideExtensionGlobalLoader(true);
                                 vscode.window.showErrorMessage(`Failed to open repository: ${error.message}`);
                             }
                             break;
@@ -1344,6 +1357,7 @@ export function activate(context: vscode.ExtensionContext) {
                             break;
                         case 'starRepository':
                             try {
+                                showExtensionGlobalLoader('Starring repository...');
                                 console.log('Starring repository:', message.owner, message.repo);
                                 const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
                                 const octokit = new Octokit({ auth: session.accessToken });
@@ -1364,13 +1378,16 @@ export function activate(context: vscode.ExtensionContext) {
                                     starred: true,
                                     starredRepos: updatedStarredRepos
                                 });
+                                hideExtensionGlobalLoader();
                             } catch (error: any) {
                                 console.error('Error starring repository:', error);
                                 vscode.window.showErrorMessage(`Failed to star repository: ${error.message}`);
+                                hideExtensionGlobalLoader();
                             }
                             break;
                         case 'unstarRepository':
                             try {
+                                showExtensionGlobalLoader('Unstarring repository...');
                                 console.log('Unstarring repository:', message.owner, message.repo);
                                 const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
                                 const octokit = new Octokit({ auth: session.accessToken });
@@ -1391,13 +1408,16 @@ export function activate(context: vscode.ExtensionContext) {
                                     starred: false,
                                     starredRepos: updatedStarredRepos
                                 });
+                                hideExtensionGlobalLoader();
                             } catch (error: any) {
                                 console.error('Error unstarring repository:', error);
                                 vscode.window.showErrorMessage(`Failed to unstar repository: ${error.message}`);
+                                hideExtensionGlobalLoader();
                             }
                             break;
                         case 'deleteRepository':
                             try {
+                                showExtensionGlobalLoader('Deleting repository...');
                                 console.log('Deleting repository:', message.owner, message.repo);
                                 const session = await vscode.authentication.getSession('github', ['repo', 'delete_repo'], { createIfNone: true });
                                 const octokit = new Octokit({ auth: session.accessToken });
@@ -1464,6 +1484,7 @@ export function activate(context: vscode.ExtensionContext) {
                                 githubRepoProvider.refresh();
                                 githubProfileReposProvider.refresh();
                                 githubStarsProvider.refresh();
+                                hideExtensionGlobalLoader();
                             } catch (error: any) {
                                 console.error('Error deleting repository:', error);
                                 vscode.window.showErrorMessage(`Failed to delete repository: ${error.message}`);
@@ -1475,6 +1496,7 @@ export function activate(context: vscode.ExtensionContext) {
                                     repo: message.repo,
                                     error: error.message
                                 });
+                                hideExtensionGlobalLoader();
                             }
                             break;
                     }
@@ -1910,6 +1932,7 @@ function getLanguageFromExtension(filePath: string): string {
 
 function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, tree: any[], webview: vscode.Webview): string {
     const nonce = getNonce();
+    const iconSvg = '<svg viewBox="0 0 16 16" width="40" height="40" aria-hidden="true" class="gh-loader-icon"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2 .37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>';
     
     // Ultra-simple tree structure: just root level items
     const createBasicTreeStructure = (items: any[]) => {
@@ -1994,6 +2017,8 @@ function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, t
     };
     
     const treeStructure = createBasicTreeStructure(tree);
+    const globalLoaderCSS = `#globalLoaderOverlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(13,17,23,.85);backdrop-filter:blur(2px);z-index:9999;}#globalLoaderOverlay.active{display:flex}.gh-loader-shell{display:flex;flex-direction:column;align-items:center;gap:18px}.gh-loader-ring{width:80px;height:80px;border:4px solid rgba(255,255,255,0.12);border-top-color:#2f81f7;border-radius:50%;animation:ghSpin .9s linear infinite;position:relative;display:flex;align-items:center;justify-content:center}.gh-loader-icon{color:#2f81f7;filter:drop-shadow(0 0 6px rgba(47,129,247,.6));animation:ghIconPulse 3s ease-in-out infinite}.gh-loader-text{font:600 13px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#e6edf3;letter-spacing:.5px;text-transform:uppercase}@keyframes ghSpin{to{transform:rotate(360deg)}}@keyframes ghIconPulse{0%,100%{opacity:.85}50%{opacity:1}}`;
+    const globalLoaderHTML = `<div id="globalLoaderOverlay" role="alert" aria-live="polite" aria-busy="true"><div class="gh-loader-shell"><div class="gh-loader-ring">${iconSvg}</div><div class="gh-loader-text" id="globalLoaderText">Loading...</div></div></div>`;
     
     // Ultra-simple tree rendering
     const renderBasicTree = (structure: any): string => {
@@ -2080,6 +2105,9 @@ function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, t
                         </style>
         </head>
         <body>
+            ${globalLoaderHTML}
+            <style>${globalLoaderCSS}</style>
+            <style>#globalLoaderOverlay{display:flex}</style>
             <div class="container">
                 <div class="sidebar">
                     <div class="repo-header">
@@ -2115,6 +2143,8 @@ function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, t
             
             <script nonce="${nonce}">
                 const vscode = acquireVsCodeApi();
+                // Global loader listener
+                window.addEventListener('message', ev => { const m = ev.data; if(m && m.command==='globalLoader'){ const o=document.getElementById('globalLoaderOverlay'); const t=document.getElementById('globalLoaderText'); if(m.action==='show'){ if(t && m.text) t.textContent=m.text; o && (o.style.display='flex'); } if(m.action==='hide'){ o && (o.style.display='none'); } }});
                 let activeElement = null;
                 
                 // Initialize event listeners when page loads
@@ -2258,11 +2288,18 @@ function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, t
                     element.classList.add('active');
                     activeElement = element;
                     
-                    // Show loading
-                    document.getElementById('file-display').innerHTML = 
-                        '<div class="loading">' +
-                            '<span>Loading ' + path + '...</span>' +
-                        '</div>';
+                    // Show overlay loader with file name (lock so initial hide won't remove it)
+                    try {
+                        const overlay = document.getElementById('globalLoaderOverlay');
+                        if (overlay) {
+                            overlay.dataset.locked = '1';
+                            overlay.style.display = 'flex';
+                            const t = document.getElementById('globalLoaderText');
+                            if (t) t.textContent = 'Loading ' + (path.split('/').pop() || path) + '...';
+                        }
+                    } catch (e) { console.warn('Overlay show failed', e); }
+                    // Also put a lightweight inline placeholder
+                    document.getElementById('file-display').innerHTML = '<div class="loading"><span>Loading ' + path + '...</span></div>';
                     
                     // Request file content with type information
                     vscode.postMessage({
@@ -2295,11 +2332,13 @@ function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, t
                               +   '<div class="blob-wrapper"><table><tbody>'+numberedRows+'</tbody></table></div>'
                               + '</div>';
                         }
+                        const ov = document.getElementById('globalLoaderOverlay'); if (ov) { ov.style.display='none'; delete ov.dataset.locked; }
                     } else if (message.command === 'showError') {
                         document.getElementById('file-display').innerHTML = 
                             '<div class="error">' +
                                 '<strong>Error:</strong> ' + message.error +
                             '</div>';
+                        const ov = document.getElementById('globalLoaderOverlay'); if (ov) { ov.style.display='none'; delete ov.dataset.locked; }
                     }
                 });
                 
@@ -2322,6 +2361,8 @@ function getRepositoryExplorerHTML(owner: string, repo: string, repoInfo: any, t
                 }
                 // Initial welcome
                 document.getElementById('file-display').innerHTML = '<div class="welcome-screen"><div class="welcome-icon">📁</div><div class="welcome-title">${owner}/${repo}</div><div class="welcome-subtitle">Select a file to view its contents</div></div>';
+                // Hide initial overlay after tree is rendered (unless a file load locked it)
+                try { const ov=document.getElementById('globalLoaderOverlay'); if(ov){ const t=document.getElementById('globalLoaderText'); if(t) t.textContent='Loading repository...'; setTimeout(()=>{ if(!ov.dataset.locked) ov.style.display='none'; }, 300); } } catch(e) {}
             </script>
         </body>
         </html>
@@ -3668,6 +3709,20 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
             </style>
         </head>
         <body>
+            <div id="globalLoaderOverlay" style="position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(13,17,23,.85);backdrop-filter:blur(2px);z-index:4000;">
+                <div class="gh-loader-shell" style="display:flex;flex-direction:column;align-items:center;gap:18px;">
+                    <div class="gh-loader-ring" style="width:80px;height:80px;border:4px solid rgba(255,255,255,0.12);border-top-color:#2f81f7;border-radius:50%;animation:ghSpin .9s linear infinite;position:relative;display:flex;align-items:center;justify-content:center;">
+                        <svg viewBox="0 0 16 16" width="46" height="46" aria-hidden="true" class="gh-loader-icon" style="color:#2f81f7;filter:drop-shadow(0 0 6px rgba(47,129,247,.6));animation:ghIconPulse 3s ease-in-out infinite;">
+                            <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2 .37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+                        </svg>
+                    </div>
+                    <div id="globalLoaderText" style="font:600 13px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#e6edf3;letter-spacing:.5px;text-transform:uppercase;">Loading...</div>
+                </div>
+                <style>
+                    @keyframes ghSpin { to { transform: rotate(360deg); } }
+                    @keyframes ghIconPulse { 0%,100% { opacity:.85;} 50% { opacity:1;} }
+                </style>
+            </div>
             <!-- GitHub-like Header -->
             <div class="AppHeader">
                 <div class="AppHeader-globalBar">
@@ -3847,6 +3902,16 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                 let STARRED = ${starredJson};
                 const PINNED = ${pinnedJson};
                 const starredSet = new Set(STARRED.map(r => (r.full_name || (r.owner.login + '/' + r.name))));
+                // Global loader listener
+                window.addEventListener('message', ev => {
+                    const m = ev.data;
+                    if(m && m.command === 'globalLoader') {
+                        const overlay = document.getElementById('globalLoaderOverlay');
+                        const textEl = document.getElementById('globalLoaderText');
+                        if(m.action === 'show') { if(textEl && m.text) textEl.textContent = m.text; overlay && (overlay.style.display='flex'); }
+                        if(m.action === 'hide') { overlay && (overlay.style.display='none'); }
+                    }
+                });
 
                 // Navigation Tabs
                 document.querySelectorAll('.UnderlineNav-item').forEach(t => t.addEventListener('click', () => {

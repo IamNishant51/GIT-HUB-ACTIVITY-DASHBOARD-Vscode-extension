@@ -24,6 +24,63 @@ body {
   color:var(--color-fg-default);
 }
 
+/* Layout refinements for closer GitHub parity */
+.container { gap:0; }
+.sidebar { width:300px; }
+.repo-header { padding:16px 16px 12px; }
+.repo-title { font-size:18px; font-weight:600; letter-spacing:.2px; }
+.repo-stats { margin-top:4px; }
+
+/* Active / hover states similar to GitHub */
+.tree-item { position:relative; border-left:2px solid transparent; }
+.tree-item.active { background:var(--color-canvas-subtle); border-left-color:var(--color-accent-fg); color:var(--color-fg-default); }
+.tree-item.folder.active { font-weight:600; }
+.tree-item:hover { border-left-color:var(--color-border-default); }
+
+/* Scroll adjustments */
+.file-tree { scrollbar-gutter:stable both-edges; }
+#file-display { background:var(--color-canvas-default); }
+
+/* Sticky toolbar & file header like blob view */
+.file-toolbar { position:sticky; top:0; z-index:30; backdrop-filter:blur(4px); background:rgba(22,27,34,.9); }
+.Box-header { position:sticky; top:40px; z-index:25; background:var(--color-canvas-subtle); }
+
+/* Improve branch badge */
+.branch-badge { display:inline-flex; align-items:center; gap:4px; background:var(--color-canvas-inset); }
+
+/* Code table refinements */
+.blob-wrapper { margin:0 0 32px; border-radius:0; border-left:none; border-right:none; border-bottom:none; }
+.blob-wrapper table { table-layout:auto; }
+tbody tr:hover td.blob-code { background:#161b22; }
+.blob-num { padding:0 12px; font-size:12px; }
+.blob-code { font-size:12px; }
+
+/* Line number anchor mimic */
+.blob-num { cursor:pointer; }
+.blob-num:hover { color:var(--color-fg-default); text-decoration:underline; }
+
+/* Breadcrumb tweaks */
+.breadcrumbs { font-size:13px; }
+.breadcrumbs .sep { padding:0 2px; }
+
+/* Responsive adjustments */
+@media (max-width: 1000px) {
+  .sidebar { width:240px; }
+  .repo-title { font-size:16px; }
+}
+@media (max-width: 800px) {
+  .container { flex-direction:column; }
+  .sidebar { width:100%; border-right:none; border-bottom:1px solid var(--color-border-default); flex-direction:column; }
+  .file-tree { max-height:220px; border-top:1px solid var(--color-border-default); }
+  .file-toolbar { top:0; }
+  .Box-header { top:40px; }
+}
+@media (max-width: 600px) {
+  .repo-header { padding:12px 12px 8px; }
+  .repo-title { font-size:15px; }
+  .blob-num { min-width:40px; }
+}
+
 .container { display:flex; height:100vh; }
 .sidebar { width:340px; border-right:1px solid var(--color-border-default); background:var(--color-canvas-default); display:flex; flex-direction:column; }
 .repo-header { padding:16px; border-bottom:1px solid var(--color-border-default); background:var(--color-canvas-subtle); }

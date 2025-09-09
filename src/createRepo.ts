@@ -1,7 +1,13 @@
 import * as vscode from 'vscode';
 import { Octokit } from '@octokit/rest';
 
-export function getCreateRepoWebviewContent(webview: vscode.Webview, nonce: string, extensionUri: vscode.Uri): string {
+export function getCreateRepoWebviewContent(
+    webview: vscode.Webview,
+    nonce: string,
+    extensionUri: vscode.Uri,
+    gitignoreTemplates: string[] = [],
+    licenseTemplates: { key: string; name: string; spdx_id?: string }[] = []
+): string {
     const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'resources', 'createRepo.css'));
     const codiconsUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'node_modules', '@vscode/codicons', 'dist', 'codicon.css'));
 
@@ -25,7 +31,7 @@ export function getCreateRepoWebviewContent(webview: vscode.Webview, nonce: stri
                             <h1>Create a new repository</h1>
                         </div>
                         <p class="github-create-repo-desc">A repository contains all project files, including the revision history. Already have a project repository elsewhere?</p>
-                        <form class="github-create-repo-form">
+                        <form class="github-create-repo-form" id="create-repo-form">
                             <div class="form-group">
                                 <label for="repoName">Repository name <span class="required">*</span></label>
                                 <div class="input-with-icon">
@@ -61,14 +67,43 @@ export function getCreateRepoWebviewContent(webview: vscode.Webview, nonce: stri
                                 <div class="checkbox-option">
                                     <input type="checkbox" id="addReadme" name="addReadme" checked>
                                     <label for="addReadme">Add a README file</label>
-                                    <p class="description">This is where you can write a long description for your project. <a href="#" onclick="return false;">Learn more about READMEs</a>.</p>
                                 </div>
+                                <div class="form-group" style="margin-top:12px;">
+                                    <label for="gitignoreTemplate">.gitignore template</label>
+                                    <select id="gitignoreTemplate" style="width:100%; padding:10px 12px; background:#0d1117; border:1px solid #30363d; border-radius:6px; color:#f0f6fc;">
+                                        <option value="">None</option>
+                                        ${gitignoreTemplates.map(t => `<option value="${t}">${t}</option>`).join('')}
+                                    </select>
+                                    <p class="description">Select a language or framework specific .gitignore.</p>
+                                </div>
+                                <div class="form-group" style="margin-top:12px;">
+                                    <label for="licenseTemplate">License</label>
+                                    <select id="licenseTemplate" style="width:100%; padding:10px 12px; background:#0d1117; border:1px solid #30363d; border-radius:6px; color:#f0f6fc;">
+                                        <option value="">None</option>
+                                        ${licenseTemplates.map(l => `<option value="${l.key}">${l.name}${l.spdx_id ? ' ('+l.spdx_id+')' : ''}</option>`).join('')}
+                                    </select>
+                                    <p class="description">Choose a license template appropriate for your project.</p>
+                                </div>
+                            </div>
+                            <div class="form-group" style="margin-top:12px;">
+                                <label for="defaultBranch">Default branch name</label>
+                                <input type="text" id="defaultBranch" placeholder="main" value="main" />
+                                <p class="description">Customize the initial branch name.</p>
+                            </div>
+                            <div class="form-group">
+                                <label for="homepage">Homepage (optional)</label>
+                                <input type="text" id="homepage" placeholder="https://example.com" />
+                            </div>
+                            <div class="form-group">
+                                <label for="topics">Topics (comma separated)</label>
+                                <input type="text" id="topics" placeholder="devtools, vscode, extension" />
                             </div>
                             <button id="createRepoBtn" class="github-create-repo-btn">
                                 <i class="codicon codicon-add"></i>
                                 Create repository
                             </button>
                             <div id="error-message" class="error-message"></div>
+                            <div id="success-message" class="success-message" style="display:none;"></div>
                         </form>
                     </div>
                 </div>
@@ -81,6 +116,12 @@ export function getCreateRepoWebviewContent(webview: vscode.Webview, nonce: stri
                 const publicRadio = document.getElementById('public');
                 const addReadmeCheckbox = document.getElementById('addReadme');
                 const errorMessage = document.getElementById('error-message');
+                const successMessage = document.getElementById('success-message');
+                const gitignoreSelect = document.getElementById('gitignoreTemplate');
+                const licenseSelect = document.getElementById('licenseTemplate');
+                const defaultBranchInput = document.getElementById('defaultBranch');
+                const homepageInput = document.getElementById('homepage');
+                const topicsInput = document.getElementById('topics');
                 
                 createRepoBtn.addEventListener('click', (e) => {
                     e.preventDefault();
@@ -99,6 +140,11 @@ export function getCreateRepoWebviewContent(webview: vscode.Webview, nonce: stri
                         description: descriptionInput.value,
                         isPrivate: !publicRadio.checked,
                         initReadme: addReadmeCheckbox.checked
+                        gitignoreTemplate: gitignoreSelect.value || '',
+                        licenseTemplate: licenseSelect.value || '',
+                        defaultBranch: defaultBranchInput.value || 'main',
+                        homepage: homepageInput.value || '',
+                        topics: topicsInput.value.split(',').map(t => t.trim()).filter(Boolean)
                     });
                 });
                 
@@ -107,6 +153,18 @@ export function getCreateRepoWebviewContent(webview: vscode.Webview, nonce: stri
                     if (message.command === 'creationFailed') {
                         createRepoBtn.disabled = false;
                         createRepoBtn.innerHTML = '<i class="codicon codicon-add"></i>Create repository';
+                    } else if (message.command === 'creationSuccess') {
+                        createRepoBtn.disabled = true;
+                        createRepoBtn.innerHTML = '<i class="codicon codicon-check"></i> Created';
+                        successMessage.style.display = 'block';
+                        successMessage.innerHTML = 'Repository <strong>' + message.repo.full_name + '</strong> created. <a href="#" id="openInPanel">Open now</a>';
+                        const openLink = document.getElementById('openInPanel');
+                        if (openLink) {
+                            openLink.addEventListener('click', (e) => {
+                                e.preventDefault();
+                                vscode.postMessage({ command: 'openRepo', owner: message.repo.owner.login, repo: message.repo.name, repoUrl: message.repo.clone_url });
+                            });
+                        }
                     }
                 });
             </script>

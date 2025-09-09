@@ -745,6 +745,24 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     vscode.commands.registerCommand('github-activity-dashboard.createRepo', async () => {
+        // Authenticate early to fetch template metadata
+        let gitignoreTemplates: string[] = [];
+        let licenseTemplates: { key: string; name: string; spdx_id?: string }[] = [];
+        try {
+            const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
+            const octokit = new Octokit({ auth: session.accessToken });
+            try {
+                const gi = await octokit.gitignore.getAllTemplates();
+                gitignoreTemplates = Array.isArray(gi.data) ? gi.data : [];
+            } catch (e) { console.log('Could not fetch gitignore templates', e); }
+            try {
+                const lic = await octokit.licenses.getAllCommonlyUsed();
+                licenseTemplates = Array.isArray(lic.data) ? lic.data.map(l => ({ key: l.key, name: l.name, spdx_id: (l as any).spdx_id })) : [];
+            } catch (e) { console.log('Could not fetch license templates', e); }
+        } catch (e) {
+            vscode.window.showErrorMessage('Authentication required to create a repository.');
+        }
+
         const panel = vscode.window.createWebviewPanel(
             'createRepo',
             'Create a New Repository',
@@ -754,9 +772,9 @@ export function activate(context: vscode.ExtensionContext) {
                 localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'resources')]
             }
         );
-    
+
         const nonce = getNonce();
-        panel.webview.html = getCreateRepoWebviewContent(panel.webview, nonce, context.extensionUri);
+        panel.webview.html = getCreateRepoWebviewContent(panel.webview, nonce, context.extensionUri, gitignoreTemplates, licenseTemplates);
     
         panel.webview.onDidReceiveMessage(
             async message => {
@@ -770,12 +788,31 @@ export function activate(context: vscode.ExtensionContext) {
 
                     const octokit = new Octokit({ auth: session.accessToken });
                     try {
-                        await octokit.repos.createForAuthenticatedUser({
+                        const autoInit = message.initReadme || !!message.gitignoreTemplate || !!message.licenseTemplate;
+                        const response = await octokit.repos.createForAuthenticatedUser({
                             name: message.repoName,
                             description: message.description,
                             private: message.isPrivate,
-                            auto_init: message.initReadme,
+                            auto_init: autoInit,
+                            gitignore_template: message.gitignoreTemplate || undefined,
+                            license_template: message.licenseTemplate || undefined,
                         });
+                        // Additional updates: default branch rename (if not main), topics, homepage
+                        try {
+                            if (message.defaultBranch && message.defaultBranch !== 'main') {
+                                await octokit.repos.renameBranch({ owner: response.data.owner.login, repo: response.data.name, branch: 'main', new_name: message.defaultBranch });
+                            }
+                        } catch (e) { console.log('Branch rename skipped/failed', e); }
+                        try {
+                            if (Array.isArray(message.topics) && message.topics.length) {
+                                await (octokit as any).repos.replaceAllTopics({ owner: response.data.owner.login, repo: response.data.name, names: message.topics });
+                            }
+                        } catch (e) { console.log('Topics update failed', e); }
+                        try {
+                            if (message.homepage) {
+                                await octokit.repos.update({ owner: response.data.owner.login, repo: response.data.name, homepage: message.homepage });
+                            }
+                        } catch (e) { console.log('Homepage update failed', e); }
                         vscode.window.showInformationMessage(`Successfully created repository "${message.repoName}"`);
                         
                         // Refresh the providers
@@ -788,8 +825,12 @@ export function activate(context: vscode.ExtensionContext) {
                             type: 'repoCreated',
                             repoName: message.repoName
                         });
-
-                        panel.dispose();
+                        // Show success instructions instead of closing panel
+                        try {
+                            panel.webview.postMessage({ command: 'creationSuccess', repo: response.data });
+                        } catch (e) {
+                            console.log('Could not post creationSuccess message', e);
+                        }
                     } catch (error: any) {
                         vscode.window.showErrorMessage(`Failed to create repository: ${error.message}`);
                         panel.webview.postMessage({ command: 'creationFailed' });

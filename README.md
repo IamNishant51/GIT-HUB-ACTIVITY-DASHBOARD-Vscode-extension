@@ -1,87 +1,78 @@
-# GitHub Activity Dashboard for VS Code
+# 🚀 GitHub Activity Dashboard for VS Code
 
 [![VS Code](https://img.shields.io/badge/Visual_Studio_Code-0078D4?style=flat&logo=visual-studio-code&logoColor=white)](https://marketplace.visualstudio.com/)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat&logo=typescript&logoColor=white)
 ![GitHub](https://img.shields.io/badge/GitHub-Dashboard-blue)
 
-A comprehensive Visual Studio Code extension to visualize your GitHub activity, profile stats, repositories, organizations, issues, PRs, languages, sponsors, and more — all inside VS Code!
+A comprehensive Visual Studio Code extension to visualize and manage your GitHub activity, profile stats, repositories, organizations, issues, PRs, languages, sponsors, and more — all inside VS Code!
 
 ---
 
-## Features ⚡
+## ✨ Features
 
-- **Profile Overview:** View your GitHub avatar, bio, top languages, sponsors, and pinned repositories.
-- **Repository Explorer:** Browse your repositories, inspect files, view star and fork counts, and open files in VS Code.
-- **Organization Insights:** See the organizations you belong to, explore their repositories and members.
-- **Pinned Repositories:** Highlight and quickly access your top/pinned projects.
-- **Recent Events:** Track your recent commits, pull requests, issues, and comments.
-- **Contribution Graph:** Visualize your GitHub contributions (commit heatmap, streaks, etc.).
-- **Pull Requests & Issues:** Monitor and interact with your open/closed PRs and Issues.
-- **Sponsors Data:** Display sponsorship data if you have GitHub Sponsors enabled.
-- **Comment Activity:** Analyze your comment activity across repositories.
-- **Starred Repos:** Quick access to your starred repositories.
-- **Filters & Navigation:** Easily filter and navigate through your GitHub data.
-- **Gorgeous UI:** Responsive, modern webview interface leveraging VS Code theming.
+- **Profile Dashboard**: View your GitHub profile, stats, sponsors, and contribution graphs.
+- **Repository Explorer**: Browse all your repositories and their structure with a modern explorer UI. Select files to view their contents.
+- **Branch & Commit Insights**: Visualize branches for each repo, checkout specific commits, and see branch details.
+- **Starred Repos**: Instantly access and star/unstar repositories with real-time updates.
+- **Notifications Panel**: See GitHub notifications inside VS Code, open them directly, and keep track of updates.
+- **Activity Timeline**: Explore your recent GitHub events with history grouped by repository and type.
+- **Enhanced Contribution Graphs**: Visual heatmaps for comments and PR activity.
+- **Quick Pick Search**: Use fuzzy-search to instantly open any of your repositories.
+- **Keyboard Shortcuts**: Rapid navigation between dashboard features.
+- **Custom Themes**: Choose between auto/dark/light dashboard themes for seamless integration.
+- **Pin Favorites**: Pin frequently used repositories for fast access.
+- **Language Filters**: Filter repositories by language, stars, or activity.
+- **Multi-Account Ready**: Connect and switch between multiple GitHub accounts (coming soon).
+- **Sponsor Data**: Toggle visibility of sponsor information.
+- **Repo Actions**: Enable/disable advanced repo management actions.
+- **Error Handling**: Robust authentication and error messages for smoother UX.
 
 ---
 
-## Installation 📥
+## 📥 Installation
 
-1. Open Visual Studio Code.
-2. Go to the **Extensions** view (`Ctrl+Shift+X` or `Cmd+Shift+X` on macOS).
+1. Open VS Code.
+2. Go to Extensions (`Ctrl+Shift+X`).
 3. Search for **GitHub Activity Dashboard**.
-4. Click **Install**.
-5. Reload VS Code if prompted.
+4. Click “Install”.
+
+Or install directly from [VS Code Marketplace](https://marketplace.visualstudio.com/).
 
 ---
 
-## Usage 🚀
+## 🚀 Usage
 
-1. Launch the dashboard from the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) and type `GitHub: Open Activity Dashboard`.
-2. Connect your GitHub account if prompted.
-3. Explore your profile, repositories, organizations, and contribution stats interactively.
-4. Use built-in navigation and filters to find exactly what you need.
-5. Inspect file contents, open files in the VS Code editor, and manage your repositories.
-
----
-
-## Key Features in Detail 🎯
-
-### Profile Webview
-- Displays avatar, bio, stats, sponsors, pinned repos, and languages.
-- Contribution chart and activity breakdown.
-
-### Repository Explorer
-- Browse all your repos.
-- Open files, view file content, star/fork counts, delete repos (with confirmation).
-
-### Organizations
-- See all orgs you’re a member of.
-- Drill into org repos and members.
-
-### Issues & Pull Requests
-- View your recent/open/closed PRs and Issues.
-- Quick access to GitHub for detailed browsing.
-
-### Sponsors & Comments
-- List of sponsors and sponsorship data (if available).
-- Comment stats across your repositories.
-
-### Interactive UI
-- Tabs for navigation: Profile, Repos, Orgs, Issues, PRs, Stars, Sponsors.
-- Responsive design for all screen sizes.
+- Open the **GitHub Activity Dashboard** panel from the VS Code sidebar.
+- Authenticate with your GitHub account when prompted.
+- Browse your profile, repositories, branches, activity, and notifications.
+- Use the explorer to view repo structure and open files.
+- Star/unstar repositories directly from the dashboard.
+- Search, filter, and pin repositories for instant access.
 
 ---
 
-## Requirements 🛠️
+## 🎯 Key Features in Detail
 
-- Visual Studio Code version 1.60.0 or higher.
-- Internet connection to fetch GitHub data.
-- A GitHub account.
+- **Repository Explorer**: Interactive tree view powered by the GitHub API. File and folder navigation, file previews, and links to open in browser.
+- **Branch Explorer**: Expand a repository to see all branches. Tooltips show repo info and branch count.
+- **Star Management**: Star/unstar repos with instant feedback and updated lists.
+- **Notifications**: View your GitHub notifications. Click to open details or mark as read.
+- **Activity History**: Timeline of events such as commits, PRs, issues, and comments.
+- **Enhanced Graphs**: Heatmaps and contribution graphs visualizing code reviews, comments, and more.
+- **Quick Search**: Fast fuzzy search and quick pick to open any repo.
+- **Robust Authentication**: Seamless GitHub login using VS Code authentication APIs.
 
 ---
 
-## Extension Settings ⚙️
+## 🛠️ Requirements
+
+- Visual Studio Code v1.60+
+- GitHub account
+- Internet connection
+
+---
+
+## ⚙️ Extension Settings
 
 This extension contributes the following settings:
 
@@ -92,7 +83,7 @@ This extension contributes the following settings:
 
 ---
 
-## Tips and Tricks 💡
+## 💡 Tips and Tricks
 
 - Use keyboard shortcuts to quickly access dashboard features.
 - Pin your favorite repositories for instant access.
@@ -102,7 +93,7 @@ This extension contributes the following settings:
 
 ---
 
-## Contributing 🤝
+## 🤝 Contributing
 
 Contributions are welcome! To contribute:
 
@@ -114,35 +105,29 @@ Contributions are welcome! To contribute:
 
 ---
 
-## Author ✍️
+## ✍️ Author
 
-Nishant Unavane  
-- GitHub: [@IamNishant51](https://github.com/IamNishant51)  
-- Email: anonymouslucifer400@gmail.com
+**[IamNishant51](https://github.com/IamNishant51)**
 
 ---
 
-## Support 🌟
+## 🌟 Support
 
-If you find this extension helpful:
-- Star the repository
-- Share it with your friends
-- Report issues or suggest features
-- Contribute to the project
+If you love this extension, please star the repo and share feedback! For issues, use [GitHub Issues](https://github.com/IamNishant51/GIT-HUB-ACTIVITY-DASHBOARD-Vscode-extension/issues).
 
 ---
 
-## License 📄
+## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT License
 
 ---
 
-## Acknowledgments 🙏
+## 🙏 Acknowledgments
 
-- VS Code Extension API
-- GitHub REST API
-- All contributors and users
+- [Octokit](https://github.com/octokit/rest.js) for GitHub API integration.
+- [VSCode API](https://code.visualstudio.com/api) for extension development.
+- All contributors and users for their support and ideas!
 
 ---
 

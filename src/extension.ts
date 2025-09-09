@@ -2355,52 +2355,24 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
             <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
             <title>GitHub Profile</title>
             <style>
-                /* Professional Design System with VS Code Theme Integration */
+                /* GitHub Exact Colors */
                 :root {
-                    /* GitHub Colors */
                     --color-canvas-default: #0d1117;
                     --color-canvas-subtle: #161b22;
+                    --color-canvas-inset: #010409;
                     --color-border-default: #30363d;
                     --color-border-muted: #21262d;
-                    --color-fg-default: #f0f6fc;
-                    --color-fg-muted: #c9d1d9;
-                    --color-fg-subtle: #8b949e;
-                    --color-accent-fg: #58a6ff;
-                    --color-accent-emphasis: #1f6feb;
-                    --color-success-fg: #56d364;
-                    --color-success-emphasis: #238636;
-                    --color-warning-fg: #d29922;
-                    --color-warning-emphasis: #bb8009;
-                    --color-danger-fg: #f85149;
-                    --color-danger-emphasis: #da3633;
-                    
-                    /* GitHub Typography */
-                    --font-size-small: 12px;
-                    --font-size-normal: 14px;
-                    --font-size-medium: 16px;
-                    --font-size-large: 18px;
-                    --font-size-xl: 20px;
-                    --font-size-2xl: 24px;
-                    --font-size-3xl: 28px;
-                    
-                    /* GitHub Spacing */
-                    --spacing-1: 4px;
-                    --spacing-2: 8px;
-                    --spacing-3: 12px;
-                    --spacing-4: 16px;
-                    --spacing-5: 20px;
-                    --spacing-6: 24px;
-                    --spacing-8: 32px;
-                    
-                    /* GitHub Border Radius */
-                    --border-radius-small: 6px;
-                    --border-radius-medium: 8px;
-                    --border-radius-large: 12px;
-                    
-                    /* GitHub Shadows */
-                    --shadow-small: 0 1px 0 rgba(27,31,35,0.04);
-                    --shadow-medium: 0 3px 6px rgba(27,31,35,0.15);
-                    --shadow-large: 0 8px 24px rgba(27,31,35,0.2);
+                    --color-neutral-muted: rgba(110,118,129,0.4);
+                    --color-accent-fg: #2f81f7;
+                    --color-accent-emphasis: #1158c7;
+                    --color-accent-subtle: rgba(56,139,253,0.1);
+                    --color-success-fg: #3fb950;
+                    --color-attention-fg: #d29922;
+                    --color-danger-fg: #da3633;
+                    --color-fg-default: #e6edf3;
+                    --color-fg-muted: #7d8590;
+                    --color-fg-subtle: #656d76;
+                    --color-fg-on-emphasis: #ffffff;
                 }
 
                 * {
@@ -2410,511 +2382,660 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                 }
 
                 body {
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
-                    font-size: var(--font-size-normal);
+                    font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
+                    font-size: 14px;
                     line-height: 1.5;
                     color: var(--color-fg-default);
                     background-color: var(--color-canvas-default);
-                    -webkit-font-smoothing: antialiased;
-                    -moz-osx-font-smoothing: grayscale;
+                    margin: 0;
+                    padding: 0;
                 }
 
-                .container {
-                    max-width: 1400px;
-                    margin: 0 auto;
-                    padding: var(--spacing-6);
-                    min-height: 100vh;
-                }
-
-                .header {
-                    background: var(--color-canvas-subtle);
-                    border: 1px solid var(--color-border-default);
-                    border-radius: var(--border-radius-large);
-                    padding: var(--spacing-8);
-                    margin-bottom: var(--spacing-6);
-                    box-shadow: var(--shadow-large);
+                .AppHeader {
+                    background-color: var(--color-canvas-subtle);
+                    border-bottom: 1px solid var(--color-border-default);
+                    padding: 16px 32px;
                     display: flex;
-                    gap: var(--spacing-8);
+                    justify-content: space-between;
                     align-items: center;
-                    position: relative;
-                    overflow: hidden;
                 }
 
-                .header::before {
-                    content: '';
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    height: 4px;
-                    background: linear-gradient(90deg, var(--color-accent-emphasis), var(--color-accent-fg), var(--color-success-fg));
+                .AppHeader-globalBar {
+                    display: flex;
+                    align-items: center;
+                    gap: 16px;
+                }
+
+                .github-logo {
+                    fill: var(--color-fg-default);
+                    width: 32px;
+                    height: 32px;
+                }
+
+                .HeaderMenu-link {
+                    color: var(--color-fg-default);
+                    text-decoration: none;
+                    font-weight: 600;
+                    padding: 8px 16px;
+                    border-radius: 6px;
+                    transition: background-color 0.2s;
+                }
+
+                .HeaderMenu-link:hover {
+                    background-color: var(--color-neutral-muted);
+                }
+
+                .profile-container {
+                    max-width: 1280px;
+                    margin: 0 auto;
+                    padding: 24px;
+                    display: grid;
+                    grid-template-columns: 320px 1fr;
+                    gap: 24px;
+                }
+
+                /* Left Sidebar */
+                .profile-sidebar {
+                    position: sticky;
+                    top: 24px;
+                    align-self: start;
+                }
+
+                .avatar-wrapper {
+                    position: relative;
+                    margin-bottom: 16px;
                 }
 
                 .avatar {
-                    width: 120px;
-                    height: 120px;
+                    width: 296px;
+                    height: 296px;
                     border-radius: 50%;
-                    border: 4px solid var(--color-canvas-default);
-                    box-shadow: var(--shadow-large);
-                    position: relative;
-                    z-index: 1;
-                }
-
-                .header-main {
-                    flex: 1;
-                    position: relative;
-                    z-index: 1;
-                }
-
-                .header-row {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: flex-start;
-                    margin-bottom: var(--spacing-4);
-                }
-
-                .title {
-                    font-size: var(--font-size-3xl);
-                    font-weight: 800;
-                    color: var(--color-fg-default);
-                    margin-bottom: var(--spacing-2);
-                    letter-spacing: -0.025em;
-                }
-
-                .subtitle {
-                    font-size: var(--font-size-large);
-                    color: var(--color-fg-muted);
-                    font-weight: 500;
-                }
-
-                .bio {
-                    font-size: var(--font-size-normal);
-                    color: var(--color-fg-default);
-                    line-height: 1.7;
-                    margin-bottom: var(--spacing-6);
-                    max-width: 600px;
-                }
-
-                .stats {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-                    gap: var(--spacing-4);
-                }
-
-                .stat-item {
-                    background: var(--color-canvas-default);
                     border: 1px solid var(--color-border-default);
-                    border-radius: var(--border-radius-medium);
-                    padding: var(--spacing-5);
-                    text-align: center;
-                    box-shadow: var(--shadow-medium);
-                    transition: var(--transition-fast);
                 }
 
-                .stat-item:hover {
-                    transform: translateY(-2px);
-                    box-shadow: var(--shadow-large);
-                    border-color: var(--color-accent-emphasis);
+                .profile-info {
+                    margin-bottom: 16px;
                 }
 
-                .stat-number {
-                    font-size: var(--font-size-2xl);
-                    font-weight: 900;
-                    color: var(--color-accent-fg);
-                    display: block;
-                    margin-bottom: var(--spacing-1);
+                .profile-name {
+                    font-size: 26px;
+                    font-weight: 600;
+                    line-height: 1.25;
+                    color: var(--color-fg-default);
+                    margin-bottom: 0;
                 }
 
-                .stat-label {
-                    font-size: var(--font-size-small);
+                .profile-login {
+                    font-size: 20px;
+                    font-style: normal;
+                    font-weight: 300;
+                    line-height: 24px;
                     color: var(--color-fg-muted);
-                    font-weight: 600;
-                    text-transform: uppercase;
-                    letter-spacing: 0.05em;
+                    margin-bottom: 16px;
                 }
 
-                .primary-btn {
-                    background: var(--color-accent-emphasis);
-                    color: var(--color-canvas-default);
-                    border: 1px solid var(--color-accent-emphasis);
-                    border-radius: var(--border-radius-medium);
-                    padding: var(--spacing-3) var(--spacing-5);
-                    font-weight: 600;
-                    font-size: var(--font-size-normal);
+                .profile-bio {
+                    font-size: 16px;
+                    margin-bottom: 16px;
+                    color: var(--color-fg-default);
+                }
+
+                .btn-primary {
+                    display: inline-block;
+                    padding: 5px 16px;
+                    font-size: 14px;
+                    font-weight: 500;
+                    line-height: 20px;
+                    white-space: nowrap;
+                    vertical-align: middle;
                     cursor: pointer;
-                    transition: var(--transition-fast);
-                    box-shadow: var(--shadow-medium);
+                    user-select: none;
+                    border: 1px solid;
+                    border-radius: 6px;
+                    appearance: none;
+                    color: var(--color-fg-on-emphasis);
+                    background-color: var(--color-accent-emphasis);
+                    border-color: var(--color-accent-emphasis);
+                    text-decoration: none;
+                    width: 100%;
+                    text-align: center;
+                }
+
+                .btn-primary:hover {
+                    background-color: #1158c7;
+                    border-color: #1158c7;
+                }
+
+                .profile-details {
+                    margin: 16px 0;
+                }
+
+                .profile-detail {
+                    display: flex;
+                    align-items: center;
+                    margin-bottom: 8px;
+                    font-size: 14px;
+                    color: var(--color-fg-default);
+                }
+
+                .profile-detail svg {
+                    width: 16px;
+                    height: 16px;
+                    margin-right: 8px;
+                    fill: var(--color-fg-muted);
+                    flex-shrink: 0;
+                }
+
+                .profile-stats {
+                    margin-top: 20px;
+                    padding-top: 16px;
+                    border-top: 1px solid var(--color-border-default);
+                }
+
+                .profile-stat {
+                    display: block;
+                    padding: 4px 0;
+                    color: var(--color-fg-default);
+                    text-decoration: none;
+                    font-size: 14px;
+                }
+
+                .profile-stat:hover .profile-stat-count {
+                    color: var(--color-accent-fg);
+                }
+
+                .profile-stat-count {
+                    font-weight: 600;
+                    color: var(--color-fg-default);
+                }
+
+                /* Main Content Area */
+                .profile-main {
+                    min-width: 0;
+                }
+
+                .UnderlineNav {
+                    display: flex;
+                    border-bottom: 1px solid var(--color-border-default);
+                    margin-bottom: 24px;
+                    overflow-x: auto;
+                    overflow-y: hidden;
+                }
+
+                .UnderlineNav-item {
+                    padding: 8px 16px;
+                    margin-bottom: -1px;
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: var(--color-fg-default);
+                    text-decoration: none;
+                    border-bottom: 2px solid transparent;
+                    white-space: nowrap;
+                    cursor: pointer;
+                    background: none;
+                    border-left: none;
+                    border-right: none;
+                    border-top: none;
                     display: inline-flex;
                     align-items: center;
-                    gap: var(--spacing-2);
-                    text-decoration: none;
+                    gap: 8px;
                 }
 
-                .primary-btn:hover {
-                    background: var(--color-accent-fg);
-                    box-shadow: var(--shadow-large);
-                    transform: translateY(-1px);
-                }
-
-                .primary-btn:active {
-                    transform: translateY(0);
-                    box-shadow: var(--shadow-medium);
-                }
-
-                /* Navigation Tabs */
-                .tabs {
-                    display: flex;
-                    gap: var(--spacing-2);
-                    margin: var(--spacing-8) 0 var(--spacing-4);
-                    padding: var(--spacing-2);
-                    background: var(--color-canvas-subtle);
-                    border: 1px solid var(--color-border-default);
-                    border-radius: var(--border-radius-large);
-                    box-shadow: var(--shadow-medium);
-                    overflow: hidden;
-                }
-
-                .tab {
-                    background: transparent;
-                    border: none;
-                    color: var(--color-fg-muted);
-                    padding: var(--spacing-4) var(--spacing-5);
-                    cursor: pointer;
-                    border-radius: var(--border-radius-medium);
+                .UnderlineNav-item.selected {
                     font-weight: 600;
-                    font-size: var(--font-size-normal);
-                    transition: var(--transition-fast);
-                    position: relative;
-                    display: flex;
-                    align-items: center;
-                    gap: var(--spacing-2);
+                    color: var(--color-fg-default);
+                    border-bottom-color: var(--color-accent-emphasis);
+                }
+
+                .UnderlineNav-item:hover {
+                    color: var(--color-fg-default);
                     text-decoration: none;
                 }
 
-                .tab:hover {
-                    background: var(--color-canvas-subtle);
+                .Counter {
+                    display: inline-block;
+                    padding: 2px 5px;
+                    font-size: 12px;
+                    font-weight: 500;
+                    line-height: 1;
                     color: var(--color-fg-default);
+                    background-color: var(--color-neutral-muted);
+                    border-radius: 20px;
                 }
 
-                .tab.active {
-                    background: var(--color-accent-emphasis);
-                    color: var(--color-canvas-default);
-                    box-shadow: var(--shadow-small);
-                    font-weight: 700;
-                }
-
-                .tab .count {
-                    background: var(--color-canvas-subtle);
-                    color: var(--color-fg-muted);
-                    padding: var(--spacing-1) var(--spacing-3);
-                    border-radius: 999px;
-                    font-size: var(--font-size-small);
-                    font-weight: 700;
-                    margin-left: var(--spacing-2);
-                    border: 1px solid var(--color-border-muted);
-                }
-
-                .tab.active .count {
-                    background: rgba(255, 255, 255, 0.2);
-                    color: var(--color-canvas-default);
-                    border-color: rgba(255, 255, 255, 0.3);
-                }
-
-                /* Content Sections */
-                .section {
+                .tab-content {
                     display: none;
-                    background: var(--color-canvas-subtle);
-                    border: 1px solid var(--color-border-default);
-                    border-radius: var(--border-radius-large);
-                    padding: var(--spacing-8);
-                    margin-bottom: var(--spacing-6);
-                    box-shadow: var(--shadow-large);
-                    position: relative;
                 }
 
-                .section.active {
+                .tab-content.active {
                     display: block;
                 }
 
-                .section-title {
-                    font-size: var(--font-size-xl);
-                    font-weight: 700;
-                    color: var(--color-fg-default);
-                    margin-bottom: var(--spacing-4);
-                    display: flex;
-                    align-items: center;
-                    gap: var(--spacing-3);
-                    padding-bottom: var(--spacing-2);
-                    border-bottom: 1px solid var(--color-border-muted);
+                /* Repository Filters */
+                .user-repo-search {
+                    position: relative;
+                    margin-bottom: 16px;
                 }
 
-                /* Filters */
-                .filters {
+                .repo-filters {
                     display: flex;
-                    gap: var(--spacing-4);
-                    margin-bottom: var(--spacing-6);
-                    padding: var(--spacing-5);
-                    background: var(--color-canvas-subtle);
-                    border: 1px solid var(--color-border-default);
-                    border-radius: var(--border-radius-medium);
-                    box-shadow: var(--shadow-medium);
+                    gap: 8px;
+                    margin-bottom: 16px;
                     flex-wrap: wrap;
-                    align-items: center;
                 }
 
-                .input, .select {
-                    background: var(--color-canvas-default);
+                .form-control {
+                    padding: 5px 12px;
+                    font-size: 14px;
+                    line-height: 20px;
                     color: var(--color-fg-default);
+                    vertical-align: middle;
+                    background-color: var(--color-canvas-default);
+                    background-repeat: no-repeat;
+                    background-position: right 8px center;
                     border: 1px solid var(--color-border-default);
-                    border-radius: var(--border-radius-medium);
-                    padding: var(--spacing-3) var(--spacing-4);
-                    font-size: var(--font-size-normal);
-                    font-weight: 500;
-                    min-width: 200px;
-                    transition: var(--transition-fast);
-                    box-shadow: var(--shadow-small);
-                }
-
-                .input:focus, .select:focus {
+                    border-radius: 6px;
                     outline: none;
+                    box-shadow: inset 0 1px 0 rgba(208,215,222,0.2);
+                }
+
+                .form-control:focus {
                     border-color: var(--color-accent-emphasis);
-                    box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.1);
+                    outline: none;
+                    box-shadow: inset 0 1px 0 rgba(208,215,222,0.2), 0 0 0 3px rgba(9,105,218,0.3);
                 }
 
-                .input::placeholder {
-                    color: var(--color-fg-muted);
-                    font-weight: 400;
-                }
-
-                .right {
-                    margin-left: auto;
+                .form-select {
+                    padding-right: 20px;
+                    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23e6edf3' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m1 6 7 7 7-7'/%3e%3c/svg%3e");
+                    background-repeat: no-repeat;
+                    background-position: right 8px center;
+                    background-size: 16px 12px;
+                    appearance: none;
                 }
 
                 /* Repository Grid */
-                .grid {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-                    gap: var(--spacing-4);
+                .repo-list {
+                    list-style: none;
+                    margin: 0;
+                    padding: 0;
                 }
 
-                .card {
-                    background: var(--color-canvas-default);
-                    border: 1px solid var(--color-border-default);
-                    border-radius: var(--border-radius-large);
-                    padding: var(--spacing-5);
+                .repo-list-item {
                     position: relative;
-                    transition: var(--transition-normal);
-                    cursor: pointer;
-                    box-shadow: var(--shadow-medium);
-                    overflow: hidden;
-                    min-height: 240px;
+                    padding: 24px 0;
+                    border-bottom: 1px solid var(--color-border-muted);
                 }
 
-                .card::before {
-                    content: '';
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    height: 4px;
-                    background: linear-gradient(90deg, var(--color-accent-emphasis), var(--color-accent-fg));
-                    transform: scaleX(0);
-                    transition: var(--transition-normal);
+                .repo-list-item:first-child {
+                    padding-top: 0;
                 }
 
-                .card:hover {
-                    transform: translateY(-4px) scale(1.01);
-                    box-shadow: var(--shadow-large);
-                    border-color: var(--color-accent-emphasis);
+                .repo-list-item:last-child {
+                    border-bottom: none;
                 }
 
-                .card:hover::before {
-                    transform: scaleX(1);
-                }
-
-                .card-header {
+                .repo {
                     display: flex;
-                    justify-content: space-between;
                     align-items: flex-start;
-                    margin-bottom: var(--spacing-3);
-                }
-
-                .card-title {
-                    font-size: var(--font-size-large);
-                    font-weight: 700;
-                    color: var(--color-accent-fg);
-                    text-decoration: none;
-                    display: block;
-                    margin-bottom: var(--spacing-2);
-                    line-height: 1.4;
-                    transition: var(--transition-fast);
-                    flex: 1;
-                }
-
-                .card-title:hover {
-                    color: var(--color-accent-emphasis);
-                    text-decoration: underline;
-                }
-
-                .badge {
-                    font-size: var(--font-size-small);
-                    font-weight: 700;
-                    padding: var(--spacing-1) var(--spacing-3);
-                    border-radius: 999px;
-                    text-transform: uppercase;
-                    letter-spacing: 0.5px;
-                    border: 1px solid;
-                    display: inline-flex;
-                    align-items: center;
-                    gap: var(--spacing-1);
-                    font-family: var(--font-family-mono, 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace);
-                }
-
-                .badge.public {
-                    background: rgba(86, 211, 100, 0.1);
-                    color: var(--color-success-fg);
-                    border-color: var(--color-success-fg);
-                }
-
-                .badge.private {
-                    background: rgba(214, 148, 34, 0.1);
-                    color: var(--color-warning-fg);
-                    border-color: var(--color-warning-fg);
-                }
-
-                .desc {
-                    color: var(--color-fg-muted);
-                    font-size: var(--font-size-normal);
-                    margin-bottom: var(--spacing-4);
-                    line-height: 1.6;
-                    display: -webkit-box;
-                    -webkit-line-clamp: 2;
-                    -webkit-box-orient: vertical;
-                    overflow: hidden;
-                }
-
-                .meta {
-                    display: flex;
-                    gap: var(--spacing-3);
-                    color: var(--color-fg-muted);
-                    font-size: var(--font-size-small);
-                    align-items: center;
-                    flex-wrap: wrap;
-                    margin-bottom: var(--spacing-4);
-                }
-
-                .meta-item {
-                    display: flex;
-                    align-items: center;
-                    gap: var(--spacing-2);
-                    padding: var(--spacing-2) var(--spacing-3);
-                    background: var(--color-canvas-subtle);
-                    border: 1px solid var(--color-border-muted);
-                    border-radius: var(--border-radius-small);
-                    transition: var(--transition-fast);
-                    font-weight: 500;
-                    font-size: var(--font-size-small);
-                }
-
-                .meta-item:hover {
-                    background: var(--color-canvas-default);
-                    transform: translateY(-1px);
-                    box-shadow: var(--shadow-small);
-                }
-
-                .lang-dot {
-                    width: 12px;
-                    height: 12px;
-                    border-radius: 50%;
-                    display: inline-block;
-                    border: 2px solid var(--color-canvas-default);
-                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-                }
-
-                .card-footer {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    margin-top: auto;
-                    padding-top: var(--spacing-3);
-                    border-top: 1px solid var(--color-border-muted);
-                }
-
-                .card-actions {
-                    display: flex;
-                    gap: var(--spacing-2);
-                }
-
-                .icon-btn {
-                    background: var(--color-canvas-subtle);
-                    color: var(--color-fg-default);
-                    border: 1px solid var(--color-border-default);
-                    border-radius: var(--border-radius-medium);
-                    padding: var(--spacing-2) var(--spacing-4);
-                    cursor: pointer;
-                    font-size: var(--font-size-small);
-                    font-weight: 600;
-                    transition: var(--transition-fast);
-                    display: inline-flex;
-                    align-items: center;
-                    gap: var(--spacing-2);
-                    min-width: 70px;
-                    justify-content: center;
-                    text-decoration: none;
-                }
-
-                .icon-btn:hover {
-                    background: var(--color-canvas-default);
-                    transform: translateY(-1px);
-                    box-shadow: var(--shadow-medium);
-                    border-color: var(--color-accent-emphasis);
-                }
-
-                .icon-btn.danger {
-                    background: transparent;
-                    color: var(--vscode-errorForeground);
-                    border: 1px solid var(--vscode-errorForeground);
-                    opacity: 0.8;
-                }
-
-                .icon-btn.danger:hover {
-                    background: var(--vscode-errorForeground);
-                    color: var(--vscode-editor-background);
-                    opacity: 1;
-                    transform: translateY(-1px);
-                }
-
-                .icon-btn.danger:disabled {
-                    opacity: 0.6;
-                    cursor: not-allowed;
-                    transform: none;
-                }
-
-                .icon-btn.danger:disabled:hover {
-                    background: transparent;
-                    color: var(--vscode-errorForeground);
-                    transform: none;
-                }
-
-                .updated-text {
-                    font-size: var(--font-size-small);
-                    color: var(--color-fg-muted);
-                    font-style: italic;
+                    width: 100%;
+                    text-align: left;
                 }
 
                 .repo-icon {
-                    position: absolute;
-                    top: var(--spacing-3);
-                    right: var(--spacing-3);
-                    width: 24px;
-                    height: 24px;
-                    opacity: 0.3;
-                    color: var(--color-accent-fg);
-                    transition: var(--transition-fast);
+                    margin-right: 12px;
+                    margin-top: 2px;
+                    fill: var(--color-fg-muted);
+                    flex-shrink: 0;
                 }
 
-                .card:hover .repo-icon {
+                .repo-info {
+                    min-width: 0;
+                    flex: 1;
+                }
+
+                .repo-name {
+                    display: inline-block;
+                    font-weight: 600;
+                    color: var(--color-accent-fg);
+                    font-size: 20px;
+                    text-decoration: none;
+                    margin-bottom: 4px;
+                }
+
+                .repo-name:hover {
+                    text-decoration: underline;
+                }
+
+                .Label {
+                    display: inline-block;
+                    padding: 0 7px;
+                    font-size: 12px;
+                    font-weight: 500;
+                    line-height: 18px;
+                    border-radius: 2em;
+                    border: 1px solid transparent;
+                    margin-left: 8px;
+                }
+
+                .Label--secondary {
+                    color: var(--color-fg-muted);
+                    border-color: var(--color-border-default);
+                }
+
+                .repo-description {
+                    color: var(--color-fg-muted);
+                    font-size: 14px;
+                    margin-bottom: 8px;
+                    display: inline-block;
+                    width: 75%;
+                }
+
+                .repo-meta {
+                    display: flex;
+                    align-items: center;
+                    gap: 16px;
+                    font-size: 12px;
+                    color: var(--color-fg-muted);
+                }
+
+                .repo-language-color {
+                    position: relative;
+                    top: 1px;
+                    display: inline-block;
+                    width: 12px;
+                    height: 12px;
+                    border: 1px solid rgba(27,31,36,0.15);
+                    border-radius: 50%;
+                    margin-right: 4px;
+                }
+
+                .repo-actions {
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 8px;
+                    margin-left: 16px;
+                }
+
+                .btn {
+                    position: relative;
+                    display: inline-block;
+                    padding: 5px 16px;
+                    font-size: 14px;
+                    font-weight: 500;
+                    line-height: 20px;
+                    white-space: nowrap;
+                    vertical-align: middle;
+                    cursor: pointer;
+                    user-select: none;
+                    border: 1px solid;
+                    border-radius: 6px;
+                    appearance: none;
+                }
+
+                .btn-sm {
+                    padding: 3px 12px;
+                    font-size: 12px;
+                    line-height: 18px;
+                }
+
+                .btn-outline {
+                    color: var(--color-accent-fg);
+                    background-color: transparent;
+                    border-color: var(--color-border-default);
+                }
+
+                .btn-outline:hover {
+                    color: var(--color-fg-on-emphasis);
+                    background-color: var(--color-accent-emphasis);
+                    border-color: var(--color-accent-emphasis);
+                }
+
+                .btn-danger {
+                    color: var(--color-danger-fg);
+                    background-color: transparent;
+                    border-color: var(--color-border-default);
+                }
+
+                .btn-danger:hover {
+                    color: var(--color-fg-on-emphasis);
+                    background-color: var(--color-danger-fg);
+                    border-color: var(--color-danger-fg);
+                }
+
+                /* Starred Repositories */
+                .starred-repos {
+                    list-style: none;
+                    margin: 0;
+                    padding: 0;
+                }
+
+                .starred-repo-item {
+                    position: relative;
+                    padding: 16px 0;
+                    border-bottom: 1px solid var(--color-border-muted);
+                }
+
+                .starred-repo-item:last-child {
+                    border-bottom: none;
+                }
+
+                .starred-repo {
+                    display: flex;
+                    align-items: flex-start;
+                    width: 100%;
+                }
+
+                .starred-repo-info {
+                    min-width: 0;
+                    flex: 1;
+                }
+
+                .starred-repo-name {
+                    display: inline-block;
+                    font-weight: 600;
+                    color: var(--color-accent-fg);
+                    font-size: 16px;
+                    text-decoration: none;
+                    margin-bottom: 4px;
+                }
+
+                .starred-repo-name:hover {
+                    text-decoration: underline;
+                }
+
+                .starred-repo-description {
+                    color: var(--color-fg-muted);
+                    font-size: 14px;
+                    margin-bottom: 8px;
+                    display: inline-block;
+                }
+
+                .starred-repo-meta {
+                    display: flex;
+                    align-items: center;
+                    gap: 16px;
+                    font-size: 12px;
+                    color: var(--color-fg-muted);
+                }
+
+                .starred-repo-actions {
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 8px;
+                    margin-left: 16px;
+                }
+
+                /* Activity Tab Styles */
+                .activity-container {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 24px;
+                }
+
+                .contribution-graph {
+                    background-color: var(--color-canvas-default);
+                    border: 1px solid var(--color-border-default);
+                    border-radius: 6px;
+                    padding: 16px;
+                }
+
+                .contrib-column {
+                    display: table-cell;
+                    width: 15px;
+                    border-spacing: 0;
+                    border-collapse: separate;
+                }
+
+                .contrib-day {
+                    display: block;
+                    width: 11px;
+                    height: 11px;
+                    border-radius: 2px;
+                    margin: 0 0 3px;
+                    cursor: pointer;
+                    outline: 1px solid rgba(27,31,36,0.06);
+                    outline-offset: -1px;
+                }
+
+                .contrib-day[data-level="0"] {
+                    background-color: #161b22;
+                }
+
+                .contrib-day[data-level="1"] {
+                    background-color: #0e4429;
+                }
+
+                .contrib-day[data-level="2"] {
+                    background-color: #006d32;
+                }
+
+                .contrib-day[data-level="3"] {
+                    background-color: #26a641;
+                }
+
+                .contrib-day[data-level="4"] {
+                    background-color: #39d353;
+                }
+
+                .activity-stats-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                    gap: 16px;
+                    margin-bottom: 24px;
+                }
+
+                .activity-stat-card {
+                    background-color: var(--color-canvas-default);
+                    border: 1px solid var(--color-border-default);
+                    border-radius: 6px;
+                    padding: 16px;
+                    text-align: center;
+                }
+
+                .activity-stat-number {
+                    display: block;
+                    font-size: 32px;
+                    font-weight: 600;
+                    color: var(--color-accent-fg);
+                    line-height: 1;
+                    margin-bottom: 4px;
+                }
+
+                .activity-stat-label {
+                    font-size: 12px;
+                    color: var(--color-fg-muted);
+                    text-transform: uppercase;
+                    letter-spacing: 0.075em;
+                    font-weight: 600;
+                }
+
+                /* Responsive Design */
+                @media (max-width: 1012px) {
+                    .profile-container {
+                        grid-template-columns: 1fr;
+                        gap: 24px;
+                    }
+                    
+                    .profile-sidebar {
+                        position: static;
+                        display: grid;
+                        grid-template-columns: auto 1fr;
+                        gap: 16px;
+                        align-items: start;
+                    }
+                    
+                    .avatar {
+                        width: 120px;
+                        height: 120px;
+                    }
+                    
+                    .profile-info {
+                        margin-bottom: 0;
+                    }
+                }
+
+                @media (max-width: 768px) {
+                    .profile-container {
+                        padding: 16px;
+                    }
+                    
+                    .profile-sidebar {
+                        grid-template-columns: 1fr;
+                        text-align: center;
+                    }
+                    
+                    .UnderlineNav {
+                        overflow-x: scroll;
+                        scrollbar-width: none;
+                        -ms-overflow-style: none;
+                    }
+                    
+                    .UnderlineNav::-webkit-scrollbar {
+                        display: none;
+                    }
+                    
+                    .repo-filters {
+                        flex-direction: column;
+                    }
+                    
+                    .form-control {
+                        width: 100%;
+                    }
+                }
+
+                /* Loading and Focus States */
+                .btn:disabled {
+                    cursor: not-allowed;
                     opacity: 0.6;
+                }
+
+                .btn:focus {
+                    outline: 2px solid var(--color-accent-emphasis);
+                    outline-offset: -2px;
+                }
+
+                .form-control:focus {
+                    outline: none;
+                }
+
+                /* Animations */
+                @keyframes fadeIn {
+                    from { opacity: 0; transform: translateY(10px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+
+                @keyframes spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+
+                .repo-list-item {
+                    animation: fadeIn 0.3s ease-out;
+                }
+
+                .starred-repo-item {
+                    animation: fadeIn 0.3s ease-out;
                 }
 
                 /* Heatmap */
@@ -3503,110 +3624,175 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
             </style>
         </head>
         <body>
-            <div class="container">
-                <div class="header">
-                    <img class="avatar" src="${userData.avatar_url}" alt="${userData.login}" />
-                    <div class="header-main">
-                        <div class="header-row">
-                            <div>
-                                <div class="title">${userData.name || userData.login}</div>
-                                <div class="subtitle">${userData.login}</div>
-                            </div>
-                            <button id="createRepoBtn" class="primary-btn"><span class="codicon codicon-repo"></span> New Repo</button>
-                        </div>
-                        <div class="bio">${userData.bio || ''}</div>
-                        <div class="stats">
-                            <div class="stat-item">
-                                <div class="stat-number">${repositories.length}</div>
-                                <div class="stat-label">repositories</div>
-                            </div>
-                            <div class="stat-item">
-                                <div class="stat-number">${starredRepos.length}</div>
-                                <div class="stat-label">stars</div>
-                            </div>
-                            <div class="stat-item">
-                                <div class="stat-number">${userData.followers}</div>
-                                <div class="stat-label">followers</div>
-                            </div>
-                            <div class="stat-item">
-                                <div class="stat-number">${userData.following}</div>
-                                <div class="stat-label">following</div>
-                            </div>
-                        </div>
-                    </div>
+            <!-- GitHub-like Header -->
+            <div class="AppHeader">
+                <div class="AppHeader-globalBar">
+                    <svg height="32" aria-hidden="true" viewBox="0 0 16 16" version="1.1" width="32" class="github-logo">
+                        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
+                    </svg>
+                    <nav>
+                        <a href="#" class="HeaderMenu-link">Pull requests</a>
+                        <a href="#" class="HeaderMenu-link">Issues</a>
+                        <a href="#" class="HeaderMenu-link">Codespaces</a>
+                        <a href="#" class="HeaderMenu-link">Marketplace</a>
+                        <a href="#" class="HeaderMenu-link">Explore</a>
+                    </nav>
                 </div>
-
-                <div class="tabs">
-                    <button class="tab active" data-tab="repositories">Repositories <span class="count" id="tabRepoCount">${repositories.length}</span></button>
-                    <button class="tab" data-tab="stars">Stars <span class="count" id="starCount">${starredRepos.length}</span></button>
-                    <button class="tab" data-tab="activity">Activity</button>
+                <div class="AppHeader-user">
+                    <img class="avatar" src="${userData.avatar_url}" alt="${userData.login}" style="width: 32px; height: 32px;" />
                 </div>
+            </div>
 
-                <section id="repositories" class="section active">
-                    <div class="section-title">
-                        <span class="codicon codicon-repo"></span>
-                        Repositories
-                        <span class="count" id="sectionRepoCount">${repositories.length}</span>
-                    </div>
-                    <div class="filters">
-                        <input id="searchInput" class="input" placeholder="🔍 Search repositories..." />
-                        <select id="typeFilter" class="select">
-                            <option value="all">📁 All Types</option>
-                            <option value="public">🌐 Public</option>
-                            <option value="private">🔒 Private</option>
-                            <option value="forks">🍴 Forks</option>
-                            <option value="archived">📦 Archived</option>
-                            <option value="mirrors">🔄 Mirrors</option>
-                        </select>
-                        <select id="langFilter" class="select"></select>
-                        <select id="sortBy" class="select right">
-                            <option value="updated">🕒 Recently updated</option>
-                            <option value="name">📝 Name</option>
-                            <option value="stars">⭐ Stars</option>
-                        </select>
-                    </div>
-                    <div class="grid" id="repoGrid"></div>
-                </section>
-
-                <section id="stars" class="section">
-                    <div class="section-title">
-                        <span class="codicon codicon-star"></span>
-                        Starred Repositories
-                        <span class="count" id="starCount">${starredRepos.length}</span>
-                    </div>
-                    <div class="grid" id="starGrid"></div>
-                </section>
-
-                <section id="activity" class="section">
-                    <div class="section-title">
-                        <span class="codicon codicon-pulse"></span>
-                        Activity Overview
+            <!-- Main Profile Container -->
+            <div class="profile-container">
+                <!-- Left Sidebar -->
+                <div class="profile-sidebar">
+                    <div class="avatar-wrapper">
+                        <img class="avatar" src="${userData.avatar_url}" alt="${userData.login}" />
                     </div>
                     
-                    <div class="activity-grid">
-                        <div class="activity-card">
-                            <h3>Contribution Activity</h3>
-                            <div class="contribution-heatmap">
-                                ${generateEnhancedContributionGraph(commentActivity)}
-                            </div>
+                    <div class="profile-info">
+                        <h1 class="profile-name">${userData.name || userData.login}</h1>
+                        <p class="profile-login">${userData.login}</p>
+                        
+                        <button id="createRepoBtn" class="btn-primary">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 8px;">
+                                <path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 011-1h8zM5 12.25v3.25a.25.25 0 00.4.2l1.45-1.087a.25.25 0 01.3 0L8.6 15.7a.25.25 0 00.4-.2v-3.25a.25.25 0 00-.25-.25h-3.5a.25.25 0 00-.25.25z"></path>
+                            </svg>
+                            New repository
+                        </button>
+                        
+                        ${userData.bio ? `<div class="profile-bio">${userData.bio}</div>` : ''}
+                        
+                        <div class="profile-details">
+                            ${userData.company ? `
+                                <div class="profile-detail">
+                                    <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
+                                        <path d="M1.75 16A1.75 1.75 0 010 14.25V1.75C0 .784.784 0 1.75 0h8.5C11.216 0 12 .784 12 1.75v12.5c0 .085-.006.168-.018.25h2.268a.25.25 0 00.25-.25V8.285a.25.25 0 00-.111-.208l-1.055-.703a.75.75 0 11.832-1.248l1.055.703c.487.325.779.871.779 1.456v5.965A1.75 1.75 0 0114.25 16h-2.5a.75.75 0 01-.197-.026c-.099.017-.2.026-.303.026h-8.5zM9 9a.75.75 0 000-1.5H4.5a.75.75 0 000 1.5H9zM4.5 5.75a.75.75 0 000 1.5h3.5a.75.75 0 000-1.5h-3.5z"></path>
+                                    </svg>
+                                    ${userData.company}
+                                </div>
+                            ` : ''}
+                            ${userData.location ? `
+                                <div class="profile-detail">
+                                    <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
+                                        <path d="m12.596 11.596-3.535 3.536a1.5 1.5 0 0 1-2.122 0l-3.535-3.536a6.5 6.5 0 1 1 9.192-9.193 6.5 6.5 0 0 1 0 9.193Zm-1.06-8.132v-.001a5 5 0 1 0-7.072 7.072L8 14.07l3.536-3.534a5 5 0 0 0 0-7.072ZM8 9a2 2 0 1 1-.001-3.999A2 2 0 0 1 8 9Z"></path>
+                                    </svg>
+                                    ${userData.location}
+                                </div>
+                            ` : ''}
+                            ${userData.email ? `
+                                <div class="profile-detail">
+                                    <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
+                                        <path d="M1.75 2h12.5c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0114.25 14H1.75A1.75 1.75 0 010 12.25v-8.5C0 2.784.784 2 1.75 2ZM1.5 12.251c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25V5.809L8.38 9.397a.75.75 0 01-.76 0L1.5 5.809v6.442Zm13-8.181v-.32a.25.25 0 00-.25-.25H1.75a.25.25 0 00-.25.25v.32L8 7.88l6.5-3.81Z"></path>
+                                    </svg>
+                                    ${userData.email}
+                                </div>
+                            ` : ''}
+                            ${userData.blog ? `
+                                <div class="profile-detail">
+                                    <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
+                                        <path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path>
+                                    </svg>
+                                    <a href="${userData.blog}" target="_blank">${userData.blog}</a>
+                                </div>
+                            ` : ''}
                         </div>
                         
-                        <div class="activity-stats">
-                            <div class="stat-card">
-                                <div class="stat-number">${recentEvents.length}</div>
-                                <div class="stat-label">Recent Events</div>
-                            </div>
-                            <div class="stat-card">
-                                <div class="stat-number">${recentPullRequests.length}</div>
-                                <div class="stat-label">Pull Requests</div>
-                            </div>
-                            <div class="stat-card">
-                                <div class="stat-number">${recentIssues.length}</div>
-                                <div class="stat-label">Issues</div>
-                            </div>
+                        <div class="profile-stats">
+                            <a href="#" class="profile-stat">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">
+                                    <path d="M2 5.5a3.5 3.5 0 115.898 2.549 5.507 5.507 0 013.034 4.084.75.75 0 11-1.482.235 4.001 4.001 0 00-7.9 0 .75.75 0 01-1.482-.236A5.507 5.507 0 013.102 8.05 3.49 3.49 0 012 5.5zM11 4a.75.75 0 100 1.5 1.5 1.5 0 01.666 2.844.75.75 0 00-.416.672v.352a.75.75 0 00.574.73c1.2.289 2.162 1.2 2.522 2.372a.75.75 0 101.442-.412 4.01 4.01 0 00-2.56-2.78A3 3 0 0011 4z"></path>
+                                </svg>
+                                <span class="profile-stat-count">${userData.followers}</span> followers
+                            </a>
+                            <a href="#" class="profile-stat">
+                                <span class="profile-stat-count">${userData.following}</span> following
+                            </a>
                         </div>
                     </div>
-                </section>
+                </div>
+
+                <!-- Main Content -->
+                <div class="profile-main">
+                    <nav class="UnderlineNav">
+                        <button class="UnderlineNav-item selected" data-tab="repositories">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 011-1h8zM5 12.25v3.25a.25.25 0 00.4.2l1.45-1.087a.25.25 0 01.3 0L8.6 15.7a.25.25 0 00.4-.2v-3.25a.25.25 0 00-.25-.25h-3.5a.25.25 0 00-.25.25z"></path>
+                            </svg>
+                            Repositories
+                            <span class="Counter" id="tabRepoCount">${repositories.length}</span>
+                        </button>
+                        <button class="UnderlineNav-item" data-tab="stars">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.279l4.21-.612L7.327.668A.75.75 0 018 .25z"></path>
+                            </svg>
+                            Stars
+                            <span class="Counter" id="starTabCount">${starredRepos.length}</span>
+                        </button>
+                        <button class="UnderlineNav-item" data-tab="activity">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M6 2c.306 0 .582.187.696.471L10 10.731l1.304-3.26A.751.751 0 0112 7h3.25a.75.75 0 010 1.5h-2.742l-1.812 4.528a.751.751 0 01-1.392 0L6 4.77 4.696 8.03A.751.751 0 014 8.5H.75a.75.75 0 010-1.5h2.742l1.812-4.529A.751.751 0 016 2z"></path>
+                            </svg>
+                            Activity
+                        </button>
+                    </nav>
+
+                    <!-- Repositories Tab -->
+                    <div id="repositories" class="tab-content active">
+                        <div class="repo-filters">
+                            <input id="searchInput" class="form-control" type="text" placeholder="Find a repository..." />
+                            <select id="typeFilter" class="form-control form-select">
+                                <option value="">Type: All</option>
+                                <option value="public">Public</option>
+                                <option value="private">Private</option>
+                                <option value="forks">Forks</option>
+                                <option value="archived">Archived</option>
+                                <option value="mirrors">Mirrors</option>
+                            </select>
+                            <select id="langFilter" class="form-control form-select">
+                                <option value="">Language: All</option>
+                            </select>
+                            <select id="sortBy" class="form-control form-select">
+                                <option value="updated">Sort: Recently updated</option>
+                                <option value="name">Sort: Name</option>
+                                <option value="stars">Sort: Stars</option>
+                            </select>
+                        </div>
+                        <ul class="repo-list" id="repoList"></ul>
+                    </div>
+
+                    <!-- Stars Tab -->
+                    <div id="stars" class="tab-content">
+                        <ul class="starred-repos" id="starredReposList"></ul>
+                    </div>
+
+                    <!-- Activity Tab -->
+                    <div id="activity" class="tab-content">
+                        <div class="activity-container">
+                            <div class="activity-stats-grid">
+                                <div class="activity-stat-card">
+                                    <span class="activity-stat-number">${recentEvents.length}</span>
+                                    <span class="activity-stat-label">Recent Events</span>
+                                </div>
+                                <div class="activity-stat-card">
+                                    <span class="activity-stat-number">${recentPullRequests.length}</span>
+                                    <span class="activity-stat-label">Pull Requests</span>
+                                </div>
+                                <div class="activity-stat-card">
+                                    <span class="activity-stat-number">${recentIssues.length}</span>
+                                    <span class="activity-stat-label">Issues</span>
+                                </div>
+                                <div class="activity-stat-card">
+                                    <span class="activity-stat-number">${repositories.length}</span>
+                                    <span class="activity-stat-label">Repositories</span>
+                                </div>
+                            </div>
+                            
+                            ${generateEnhancedContributionGraph(commentActivity)}
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <script nonce="${nonce}">
@@ -3618,11 +3804,11 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                 const PINNED = ${pinnedJson};
                 const starredSet = new Set(STARRED.map(r => (r.full_name || (r.owner.login + '/' + r.name))));
 
-                // Tabs
-                document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
-                    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-                    t.classList.add('active');
-                    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+                // Navigation Tabs
+                document.querySelectorAll('.UnderlineNav-item').forEach(t => t.addEventListener('click', () => {
+                    document.querySelectorAll('.UnderlineNav-item').forEach(x => x.classList.remove('selected'));
+                    t.classList.add('selected');
+                    document.querySelectorAll('.tab-content').forEach(s => s.classList.remove('active'));
                     document.getElementById(t.dataset.tab).classList.add('active');
                 }));
 
@@ -3647,43 +3833,67 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                 function starButton(owner, repo){
                     const key = owner + '/' + repo;
                     const isStarred = starredSet.has(key);
-                    return '<button class="icon-btn" data-action="toggle-star" data-owner="' + owner + '" data-repo="' + repo + '" type="button">' +
-                           '<span class="codicon ' + (isStarred ? 'codicon-star-full' : 'codicon-star') + '"></span> ' + (isStarred ? 'Unstar' : 'Star') + '</button>';
+                    return '<button class="btn btn-sm btn-outline" data-action="toggle-star" data-owner="' + owner + '" data-repo="' + repo + '" type="button">' +
+                           '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">' +
+                               '<path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.279l4.21-.612L7.327.668A.75.75 0 018 .25z"></path>' +
+                           '</svg> ' + (isStarred ? 'Unstar' : 'Star') + '</button>';
                 }
 
                 function deleteButton(owner, repo){
                     if (owner !== USER_LOGIN) return '';
-                    return '<button class="icon-btn danger" data-action="delete" data-owner="' + owner + '" data-repo="' + repo + '" type="button"><span class="codicon codicon-trash"></span> Delete</button>';
+                    return '<button class="btn btn-sm btn-danger" data-action="delete" data-owner="' + owner + '" data-repo="' + repo + '" type="button">' +
+                           '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">' +
+                               '<path d="M6.5 1.75a.25.25 0 01.25-.25h2.5a.25.25 0 01.25.25V3h-3V1.75zm4.5 0V3h2.25a.75.75 0 010 1.5H2.75a.75.75 0 010-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75zM4.496 6.675a.75.75 0 10-1.492.15l.66 6.6A1.75 1.75 0 005.405 15h5.19c.9 0 1.652-.681 1.741-1.576l.66-6.6a.75.75 0 00-1.492-.149l-.66 6.6a.25.25 0 01-.249.225h-5.19a.25.25 0 01-.249-.225l-.66-6.6z"></path>' +
+                           '</svg> Delete</button>';
                 }
 
-                function card(repo){
+                function repoListItem(repo){
                     const owner = (repo.owner?.login) || USER_LOGIN;
                     const name = repo.name;
                     const lang = repo.language;
-                    const langDot = lang ? '<span class="lang-dot" style="background:' + getLangColor(lang) + '"></span>' + lang : '';
+                    const langColor = lang ? getLangColor(lang) : '#586069';
                     const isPrivate = repo.private;
-                    const visibility = '<span class="badge' + (isPrivate ? ' private' : '') + '">' + (isPrivate ? 'Private' : 'Public') + '</span>';
+                    
                     return (
-                    '<div class="card" data-owner="' + owner + '" data-repo="' + name + '">' +
-                        '<div class="card-header">' +
-                            '<div class="card-title" data-action="open">' + name + '</div>' +
-                            '<div>' + visibility + '</div>' +
-                        '</div>' +
-                        (repo.description ? '<div class="desc">' + repo.description + '</div>' : '') +
-                        '<div class="meta">' +
-                            (lang ? '<div class="meta-item">' + langDot + '</div>' : '') +
-                            '<div class="meta-item">⭐ ' + (repo.stargazers_count || (repo.stargazers?.totalCount||0)) + '</div>' +
-                            '<div class="meta-item">🍴 ' + (repo.forks_count || (repo.forks?.totalCount||0)) + '</div>' +
-                        '</div>' +
-                        '<div class="card-footer">' +
-                            '<div class="updated-text">Updated ' + fmtUpdated(repo.updated_at || repo.pushed_at || new Date().toISOString()) + '</div>' +
-                            '<div class="card-actions">' +
-                                starButton(owner, name) +
-                                deleteButton(owner, name) +
+                        '<li class="repo-list-item" data-owner="' + owner + '" data-repo="' + name + '">' +
+                            '<div class="repo">' +
+                                '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" class="repo-icon">' +
+                                    '<path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 011-1h8zM5 12.25v3.25a.25.25 0 00.4.2l1.45-1.087a.25.25 0 01.3 0L8.6 15.7a.25.25 0 00.4-.2v-3.25a.25.25 0 00-.25-.25h-3.5a.25.25 0 00-.25.25z"></path>' +
+                                '</svg>' +
+                                '<div class="repo-info">' +
+                                    '<h3>' +
+                                        '<a href="#" class="repo-name" data-action="open">' + name + '</a>' +
+                                        (isPrivate ? '<span class="Label Label--secondary">Private</span>' : '') +
+                                    '</h3>' +
+                                    (repo.description ? '<p class="repo-description">' + repo.description + '</p>' : '') +
+                                    '<div class="repo-meta">' +
+                                        (lang ? 
+                                            '<span style="display: inline-flex; align-items: center; margin-right: 16px;">' +
+                                                '<span class="repo-language-color" style="background-color: ' + langColor + ';"></span>' + lang +
+                                            '</span>' : ''
+                                        ) +
+                                        '<a href="#" style="display: inline-flex; align-items: center; margin-right: 16px; color: var(--color-fg-muted); text-decoration: none;">' +
+                                            '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">' +
+                                                '<path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.279l4.21-.612L7.327.668A.75.75 0 018 .25z"></path>' +
+                                            '</svg>' +
+                                            (repo.stargazers_count || 0) +
+                                        '</a>' +
+                                        '<a href="#" style="display: inline-flex; align-items: center; margin-right: 16px; color: var(--color-fg-muted); text-decoration: none;">' +
+                                            '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">' +
+                                                '<path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 100-1.5.75.75 0 000 1.5z"></path>' +
+                                            '</svg>' +
+                                            (repo.forks_count || 0) +
+                                        '</a>' +
+                                        '<span style="font-size: 12px; color: var(--color-fg-muted);">Updated ' + fmtUpdated(repo.updated_at || repo.pushed_at || new Date().toISOString()) + '</span>' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div class="repo-actions">' +
+                                    starButton(owner, name) +
+                                    deleteButton(owner, name) +
+                                '</div>' +
                             '</div>' +
-                        '</div>' +
-                        '<div class="repo-icon codicon codicon-repo"></div>' +
-                    '</div>');
+                        '</li>'
+                    );
                 }
 
                 function getLangColor(lang){
@@ -3714,45 +3924,62 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     if (sort==='updated') list.sort((a,b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
                     if (sort==='name') list.sort((a,b) => a.name.localeCompare(b.name));
                     if (sort==='stars') list.sort((a,b) => (b.stargazers_count||0) - (a.stargazers_count||0));
-                    document.getElementById('repoGrid').innerHTML = list.map(card).join('');
+                    document.getElementById('repoList').innerHTML = list.map(repoListItem).join('');
                 }
 
                 ['searchInput','typeFilter','langFilter','sortBy'].forEach(id => document.getElementById(id).addEventListener('input', applyFilters));
                 ['typeFilter','langFilter','sortBy'].forEach(id => document.getElementById(id).addEventListener('change', applyFilters));
 
                 // Render pinned
-                // Render stars
+                // Render starred repositories
                 function renderStars(){
-                    const grid = document.getElementById('starGrid');
-                    grid.innerHTML = STARRED.map(repo => {
+                    const list = document.getElementById('starredReposList');
+                    list.innerHTML = STARRED.map(repo => {
                         const owner = repo.owner.login;
                         const name = repo.name;
                         const lang = repo.language;
-                        const langDot = lang ? '<span class="lang-dot" style="background:' + getLangColor(lang) + '"></span>' + lang : '';
+                        const langColor = lang ? getLangColor(lang) : '#586069';
                         
-                        // Check if current user owns this repository (assuming CURRENT_USER is available)
+                        // Check if current user owns this repository
                         const isOwned = CURRENT_USER && owner === CURRENT_USER.login;
                         const deleteBtn = isOwned ? deleteButton(owner, name) : '';
                         
-                        return '<div class="card" data-owner="' + owner + '" data-repo="' + name + '">' +
-                               '  <div class="card-header">' +
-                               '    <div class="card-title" data-action="open">' + owner + '/' + name + '</div>' +
-                               '    <div><span class="badge">' + (repo.private?'Private':'Public') + '</span></div>' +
-                               '  </div>' +
-                               (repo.description? '<div class="desc">' + repo.description + '</div>' : '') +
-                               '  <div class="meta">' +
-                               '    ' + (lang ? '<div class="meta-item">' + langDot + '</div>' : '') +
-                               '    <div class="meta-item">⭐ ' + (repo.stargazers_count||0) + '</div>' +
-                               '    <div class="meta-item">🍴 ' + (repo.forks_count||0) + '</div>' +
-                               '  </div>' +
-                               '  <div class="card-footer">' +
-                               '    <div class="updated-text">Updated ' + fmtUpdated(repo.updated_at || new Date().toISOString()) + '</div>' +
-                               '    <div class="card-actions">' +
-                               '      ' + starButton(owner,name) + deleteBtn +
+                        return '<li class="starred-repo-item" data-owner="' + owner + '" data-repo="' + name + '">' +
+                               '    <div class="starred-repo">' +
+                               '        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" class="repo-icon">' +
+                               '            <path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 011-1h8zM5 12.25v3.25a.25.25 0 00.4.2l1.45-1.087a.25.25 0 01.3 0L8.6 15.7a.25.25 0 00.4-.2v-3.25a.25.25 0 00-.25-.25h-3.5a.25.25 0 00-.25.25z"></path>' +
+                               '        </svg>' +
+                               '        <div class="starred-repo-info">' +
+                               '            <h3>' +
+                               '                <a href="#" class="starred-repo-name" data-action="open">' + owner + '/' + name + '</a>' +
+                               '                ' + (repo.private ? '<span class="Label Label--secondary">Private</span>' : '') +
+                               '            </h3>' +
+                               '            ' + (repo.description ? '<p class="starred-repo-description">' + repo.description + '</p>' : '') +
+                               '            <div class="starred-repo-meta">' +
+                               '                ' + (lang ? 
+                                                    '<span style="display: inline-flex; align-items: center; margin-right: 16px;">' +
+                                                        '<span class="repo-language-color" style="background-color: ' + langColor + ';"></span>' + lang +
+                                                    '</span>' : '') +
+                               '                <span style="display: inline-flex; align-items: center; margin-right: 16px; color: var(--color-fg-muted);">' +
+                               '                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">' +
+                               '                        <path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.279l4.21-.612L7.327.668A.75.75 0 018 .25z"></path>' +
+                               '                    </svg>' +
+                               '                    ' + (repo.stargazers_count || 0) +
+                               '                </span>' +
+                               '                <span style="display: inline-flex; align-items: center; margin-right: 16px; color: var(--color-fg-muted);">' +
+                               '                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">' +
+                               '                        <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 100-1.5.75.75 0 000 1.5z"></path>' +
+                               '                    </svg>' +
+                               '                    ' + (repo.forks_count || 0) +
+                               '                </span>' +
+                               '                <span style="font-size: 12px; color: var(--color-fg-muted);">Updated ' + fmtUpdated(repo.updated_at || new Date().toISOString()) + '</span>' +
+                               '            </div>' +
+                               '        </div>' +
+                               '        <div class="starred-repo-actions">' +
+                               '            ' + starButton(owner, name) + deleteBtn +
+                               '        </div>' +
                                '    </div>' +
-                               '  </div>' +
-                               '  <div class="repo-icon codicon codicon-repo"></div>' +
-                               '</div>';
+                               '</li>';
                     }).join('');
                 }
 
@@ -3764,9 +3991,9 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     e.preventDefault();
                     e.stopPropagation();
 
-                    const cardEl = target.closest('.card');
-                    const owner = cardEl?.getAttribute('data-owner') || target.getAttribute('data-owner');
-                    const repo = cardEl?.getAttribute('data-repo') || target.getAttribute('data-repo');
+                    const listItem = target.closest('.repo-list-item, .starred-repo-item');
+                    const owner = listItem?.getAttribute('data-owner') || target.getAttribute('data-owner');
+                    const repo = listItem?.getAttribute('data-repo') || target.getAttribute('data-repo');
                     const action = target.getAttribute('data-action');
 
                     console.log('Button clicked:', { action, owner, repo, target: target.outerHTML });
@@ -3791,7 +4018,7 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     } else if (action === 'delete') {
                         // Update button to show loading state
                         target.disabled = true;
-                        target.innerHTML = '<span class="codicon codicon-loading codicon-modifier-spin"></span> Deleting...';
+                        target.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="margin-right: 4px; animation: spin 1s linear infinite;"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg> Deleting...';
                         target.style.opacity = '0.6';
                         
                         console.log('Deleting:', owner + '/' + repo);
@@ -3807,7 +4034,7 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                         const key = msg.owner + '/' + msg.repo;
                         if (msg.starred) starredSet.add(key); else starredSet.delete(key);
                         STARRED = msg.starredRepos || STARRED;
-                        document.getElementById('starCount').textContent = String(STARRED.length);
+                        document.getElementById('starTabCount').textContent = String(STARRED.length);
                         applyFilters();
                         renderStars();
                     }
@@ -3826,21 +4053,19 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                         if (tabRepoCount) tabRepoCount.textContent = String(REPOS.length);
                         if (sectionRepoCount) sectionRepoCount.textContent = String(REPOS.length);
                         
-                        // Remove from starred repositories if it was starred
-                        if (msg.starredRepos) {
-                            STARRED = msg.starredRepos;
-                            starredSet.delete(keyNormal);
-                            document.getElementById('starCount').textContent = String(STARRED.length);
-                            renderStars(); // Re-render stars to remove the deleted repo
-                        } else {
-                            // Fallback: remove from starred set and array manually
-                            starredSet.delete(keyNormal);
-                            STARRED = STARRED.filter(r => (r.owner.login + '/' + r.name) !== keyNormal);
-                            document.getElementById('starCount').textContent = String(STARRED.length);
-                            renderStars();
-                        }
-                        
-                        // Update the UI immediately
+                            // Remove from starred repositories if it was starred
+                            if (msg.starredRepos) {
+                                STARRED = msg.starredRepos;
+                                starredSet.delete(keyNormal);
+                                document.getElementById('starTabCount').textContent = String(STARRED.length);
+                                renderStars(); // Re-render stars to remove the deleted repo
+                            } else {
+                                // Fallback: remove from starred set and array manually
+                                starredSet.delete(keyNormal);
+                                STARRED = STARRED.filter(r => (r.owner.login + '/' + r.name) !== keyNormal);
+                                document.getElementById('starTabCount').textContent = String(STARRED.length);
+                                renderStars();
+                            }                        // Update the UI immediately
                         applyFilters();
                         
                         // Show success message
@@ -3861,10 +4086,10 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     }
                     if (msg.command === 'deleteError') {
                         // Re-enable delete buttons and show error
-                        document.querySelectorAll('.icon-btn[data-action="delete"]').forEach(btn => {
+                        document.querySelectorAll('.btn[data-action="delete"]').forEach(btn => {
                             if (btn.dataset.owner === msg.owner && btn.dataset.repo === msg.repo) {
                                 btn.disabled = false;
-                                btn.innerHTML = '<span class="codicon codicon-trash"></span> Delete';
+                                btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;"><path d="M6.5 1.75a.25.25 0 01.25-.25h2.5a.25.25 0 01.25.25V3h-3V1.75zm4.5 0V3h2.25a.75.75 0 010 1.5H2.75a.75.75 0 010-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75zM4.496 6.675a.75.75 0 10-1.492.15l.66 6.6A1.75 1.75 0 005.405 15h5.19c.9 0 1.652-.681 1.741-1.576l.66-6.6a.75.75 0 00-1.492-.149l-.66 6.6a.25.25 0 01-.249.225h-5.19a.25.25 0 01-.249-.225l-.66-6.6z"></path></svg> Delete';
                                 btn.style.opacity = '1';
                             }
                         });

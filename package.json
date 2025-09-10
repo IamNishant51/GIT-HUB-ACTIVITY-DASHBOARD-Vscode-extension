@@ -161,6 +161,11 @@
         "title": "Open GitHub Explore",
         "icon": "$(globe)"
       }
+      ,{
+        "command": "github-activity-dashboard.openMarketplaceView",
+        "title": "Open GitHub Marketplace",
+        "icon": "$(extensions-view-icon)"
+      }
     ],
     "menus": {
       "view/title": [

@@ -1213,6 +1213,14 @@ export function activate(context: vscode.ExtensionContext) {
                                 vscode.window.showErrorMessage('Failed to open Explore: '+err.message);
                             }
                             break;
+                        case 'openMarketplace':
+                            try {
+                                vscode.window.showInformationMessage('Opening Marketplace view...');
+                                await vscode.commands.executeCommand('github-activity-dashboard.openMarketplaceView');
+                            } catch (err:any){
+                                vscode.window.showErrorMessage('Failed to open Marketplace: '+err.message);
+                            }
+                            break;
                         case 'openRepo':
                             showExtensionGlobalLoader('Opening repository...');
                             try {
@@ -2004,6 +2012,96 @@ export function activate(context: vscode.ExtensionContext) {
                 } finally {
                         hideExtensionGlobalLoader();
                 }
+        });
+        // Marketplace (GitHub-like) showing popular repos (as extensions/apps), categories and search
+        vscode.commands.registerCommand('github-activity-dashboard.openMarketplaceView', async () => {
+            try {
+                showExtensionGlobalLoader('Opening Marketplace...');
+                const session = await vscode.authentication.getSession('github', ['repo','read:user'], { createIfNone: true });
+                const octokit = new Octokit({ auth: session.accessToken });
+                // Fetch some "categories" by using topics queries
+                const popularQuery = await octokit.rest.search.repos({ q: 'stars:>5000', sort: 'stars', order: 'desc', per_page: 12 });
+                const actionsQuery = await octokit.rest.search.repos({ q: 'topic:github-action stars:>200', sort: 'stars', order: 'desc', per_page: 8 });
+                const securityQuery = await octokit.rest.search.repos({ q: 'topic:security stars:>500', sort: 'stars', order: 'desc', per_page: 8 });
+                const toolsQuery = await octokit.rest.search.repos({ q: 'topic:cli stars:>1000', sort: 'stars', order: 'desc', per_page: 8 });
+                const nonce = getNonce();
+                const panel = vscode.window.createWebviewPanel('githubMarketplace','Marketplace · GitHub',vscode.ViewColumn.One,{ enableScripts:true });
+                function card(r:any){
+                    const owner = (r.owner&&r.owner.login)||'unknown';
+                    const desc = (r.description||'').replace(/`/g,'\`').replace(/</g,'&lt;');
+                    return `<div class="app-card" data-name='${r.full_name.toLowerCase()}'>
+                        <div class="app-head">
+                            <div class="avatar-circle">${owner[0]?.toUpperCase()}</div>
+                            <div class="app-meta"><a href="#" class="app-name" onclick="openRepo('${owner}','${r.name}')">${r.full_name}</a><div class="app-desc">${desc}</div></div>
+                        </div>
+                        <div class="stats"><span>⭐ ${r.stargazers_count}</span><span>🍴 ${r.forks_count}</span>${r.language?`<span>${r.language}</span>`:''}</div>
+                    </div>`;
+                }
+                const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${panel.webview.cspSource} https: data:; style-src ${panel.webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';"><title>Marketplace</title><style>
+                    body{margin:0;font:14px -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:#0d1117;color:#e6edf3;}
+                    .header{display:flex;justify-content:space-between;align-items:center;padding:16px 32px;background:#161b22;border-bottom:1px solid #30363d;}
+                    h1{margin:0;font-size:20px;font-weight:600;}
+                    .layout{padding:24px;max-width:1400px;margin:0 auto;}
+                    .section{margin-bottom:40px;}
+                    .section-title{font-size:18px;font-weight:600;margin:0 0 8px;}
+                    .section-sub{font-size:12px;color:#7d8590;margin:0 0 16px;}
+                    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;}
+                    .app-card{background:#161b22;border:1px solid #30363d;padding:14px 16px;border-radius:8px;display:flex;flex-direction:column;gap:10px;transition:border-color .2s,background .2s;}
+                    .app-card:hover{border-color:#2f81f7;background:#1c2530;}
+                    .app-head{display:flex;gap:12px;}
+                    .avatar-circle{width:40px;height:40px;border-radius:8px;background:#21262d;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:16px;color:#e6edf3;border:1px solid #30363d;}
+                    .app-meta{flex:1;min-width:0;}
+                    .app-name{color:#2f81f7;text-decoration:none;font-weight:600;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+                    .app-name:hover{text-decoration:underline;}
+                    .app-desc{font-size:12px;color:#7d8590;line-height:1.4;max-height:34px;overflow:hidden;}
+                    .stats{display:flex;gap:12px;font-size:12px;color:#7d8590;flex-wrap:wrap;}
+                    .search-bar{display:flex;gap:12px;margin:0 0 32px;}
+                    .search-box{flex:1;padding:8px 12px;border:1px solid #30363d;border-radius:6px;background:#0d1117;color:#e6edf3;}
+                    .category-pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+                    .pill{padding:4px 10px;border:1px solid #30363d;border-radius:20px;font-size:12px;background:#161b22;color:#7d8590;cursor:pointer;}
+                    .pill.active,.pill:hover{border-color:#2f81f7;color:#2f81f7;}
+                    .empty{padding:32px;text-align:center;color:#7d8590;font-size:13px;border:1px dashed #30363d;border-radius:8px;}
+                </style></head><body>
+                <div class='header'><h1>Marketplace</h1><div style='font-size:12px;color:#7d8590;'>Preview</div></div>
+                <div class='layout'>
+                    <div class='search-bar'>
+                        <input id='marketSearch' class='search-box' placeholder='Search Marketplace (repositories by stars, description)...'/>
+                    </div>
+                    <div class='section'>
+                        <div class='section-title'>Featured</div>
+                        <div class='section-sub'>Popular open-source repositories (most starred)</div>
+                        <div id='featuredGrid' class='grid'>${popularQuery.data.items.map(card).join('')}</div>
+                    </div>
+                    <div class='section'>
+                        <div class='section-title'>GitHub Actions</div>
+                        <div class='section-sub'>Reusable automation workflows</div>
+                        <div id='actionsGrid' class='grid'>${actionsQuery.data.items.map(card).join('')}</div>
+                    </div>
+                    <div class='section'>
+                        <div class='section-title'>Security</div>
+                        <div class='section-sub'>Security tooling and libraries</div>
+                        <div id='securityGrid' class='grid'>${securityQuery.data.items.map(card).join('')}</div>
+                    </div>
+                    <div class='section'>
+                        <div class='section-title'>CLI / Tooling</div>
+                        <div class='section-sub'>Command-line & developer utilities</div>
+                        <div id='toolsGrid' class='grid'>${toolsQuery.data.items.map(card).join('')}</div>
+                    </div>
+                </div>
+                <script nonce='${nonce}'>
+                    const vscode = acquireVsCodeApi();
+                    function openRepo(owner,name){vscode.postMessage({command:'openRepo',owner,repo:name});}
+                    const searchInput=document.getElementById('marketSearch');
+                    const allCards=Array.from(document.querySelectorAll('.app-card'));
+                    searchInput.addEventListener('input',()=>{const v=searchInput.value.toLowerCase();let shown=0;allCards.forEach(c=>{const name=c.dataset.name; const text=c.textContent.toLowerCase(); if(name.includes(v)||text.includes(v)){c.style.display='flex';shown++;} else c.style.display='none';});});
+                </script>
+                </body></html>`;
+                panel.webview.html = html;
+            } catch(err:any){
+                vscode.window.showErrorMessage('Failed to open Marketplace: '+err.message);
+            } finally {
+                hideExtensionGlobalLoader();
+            }
         });
 }
 
@@ -3846,7 +3944,7 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                         <a href="#" class="HeaderMenu-link">Pull requests</a>
                         <a href="#" class="HeaderMenu-link">Issues</a>
                         <a href="#" class="HeaderMenu-link">Codespaces</a>
-                        <a href="#" class="HeaderMenu-link">Marketplace</a>
+                        <a href="#" class="HeaderMenu-link" id="marketplaceLink">Marketplace</a>
                         <a href="#" class="HeaderMenu-link" id="exploreLink">Explore</a>
                     </nav>
                 </div>
@@ -4030,8 +4128,14 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     console.log('[Profile] Explore link clicked, sending message');
                     vscode.postMessage({ command:'openExplore' });
                 }
+                function openMarketplace(e){
+                    try { e && e.preventDefault(); } catch(_){ /* ignore */ }
+                    console.log('[Profile] Marketplace link clicked, sending message');
+                    vscode.postMessage({ command:'openMarketplace' });
+                }
                 // Attach Explore link handler (CSP-safe, replaces inline onclick)
                 try { document.getElementById('exploreLink')?.addEventListener('click', openExplore); } catch(_){ }
+                try { document.getElementById('marketplaceLink')?.addEventListener('click', openMarketplace); } catch(_){ }
 
                 // Navigation Tabs
                 document.querySelectorAll('.UnderlineNav-item').forEach(t => t.addEventListener('click', () => {

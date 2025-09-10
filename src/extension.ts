@@ -1221,6 +1221,58 @@ export function activate(context: vscode.ExtensionContext) {
                                 vscode.window.showErrorMessage('Failed to open Marketplace: '+err.message);
                             }
                             break;
+                        case 'openSettings':
+                            try {
+                                vscode.window.showInformationMessage('Opening Profile Settings...');
+                                await vscode.commands.executeCommand('github-activity-dashboard.openProfileSettings');
+                                if(message.then === 'signOutFromSettings') {
+                                    // Give settings panel a moment to load then trigger sign out via command directly
+                                    setTimeout(()=>{
+                                        vscode.commands.executeCommand('github.signout');
+                                        vscode.window.showInformationMessage('Signed out of GitHub.');
+                                    }, 800);
+                                }
+                            } catch (err:any){
+                                vscode.window.showErrorMessage('Failed to open Settings: '+err.message);
+                            }
+                            break;
+                        case 'signOut':
+                            try {
+                                const tried: string[] = [];
+                                const possible = [
+                                    'github.signout',
+                                    'workbench.action.accounts.signOutOfGithub',
+                                    'workbench.action.accounts.signOut'
+                                ];
+                                let success = false;
+                                for (const cmd of possible) {
+                                    try { tried.push(cmd); await vscode.commands.executeCommand(cmd as any); success = true; break; } catch { }
+                                }
+                                if (success) {
+                                    if(activeProfilePanel){ try { activeProfilePanel.dispose(); } catch{} }
+                                    const act = await vscode.window.showInformationMessage('Sign out executed. Reload window to ensure session cleared?', 'Reload');
+                                    if(act === 'Reload') { await vscode.commands.executeCommand('workbench.action.reloadWindow'); }
+                                } else {
+                                    const choice = await vscode.window.showInformationMessage(
+                                        'Automatic sign out not available. Use Accounts (Status Bar) → Sign Out of GitHub. Or force re-auth (refresh token) now.',
+                                        'Force Re-auth', 'How?'
+                                    );
+                                    if(choice === 'Force Re-auth') {
+                                        try {
+                                            // forceNewSession must not be combined with createIfNone per VS Code API
+                                            await vscode.authentication.getSession('github', ['repo'], { forceNewSession: true });
+                                            vscode.window.showInformationMessage('Re-auth complete (new token acquired).');
+                                        } catch(err:any){
+                                            vscode.window.showErrorMessage('Re-auth failed: '+err.message);
+                                        }
+                                    } else if (choice === 'How?') {
+                                        vscode.window.showInformationMessage('Status Bar (Accounts icon) → Sign Out of GitHub → then trigger any feature here to sign back in.');
+                                    }
+                                }
+                            } catch(err:any) {
+                                vscode.window.showErrorMessage('Logout failed: '+err.message);
+                            }
+                            break;
                         case 'openRepo':
                             showExtensionGlobalLoader('Opening repository...');
                             try {
@@ -2099,6 +2151,215 @@ export function activate(context: vscode.ExtensionContext) {
                 panel.webview.html = html;
             } catch(err:any){
                 vscode.window.showErrorMessage('Failed to open Marketplace: '+err.message);
+            } finally {
+                hideExtensionGlobalLoader();
+            }
+        });
+        // Profile Settings (GitHub-like) – edit limited public fields
+        vscode.commands.registerCommand('github-activity-dashboard.openProfileSettings', async () => {
+            try {
+                showExtensionGlobalLoader('Opening Settings...');
+                const session = await vscode.authentication.getSession('github', ['user','read:user','user:email'], { createIfNone: true });
+                const octokit = new Octokit({ auth: session.accessToken });
+                const me = await octokit.rest.users.getAuthenticated();
+                // Load extension-local preferences
+                const localPrefs = (extensionContext.globalState.get('profileSettingsPrefs') as any) || { appearance: 'system', showPrivateRepos: true };
+                const nonce = getNonce();
+                const panel = vscode.window.createWebviewPanel('githubProfileSettings','Settings · GitHub',vscode.ViewColumn.One,{ enableScripts:true });
+                const html = `<!DOCTYPE html><html><head><meta charset='UTF-8'><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${panel.webview.cspSource} https: data:; style-src ${panel.webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';"><title>Settings</title><style>
+                    body{margin:0;font:14px -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:#0d1117;color:#e6edf3;}
+                    .header{padding:16px 32px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:16px;}
+                    h1{margin:0;font-size:20px;font-weight:600;}
+                    .layout{display:grid;grid-template-columns:240px 1fr;max-width:1400px;margin:0 auto;padding:32px;gap:40px;}
+                    .nav{display:flex;flex-direction:column;gap:4px;}
+                    .nav a{padding:6px 10px;border-radius:6px;color:#e6edf3;text-decoration:none;font-weight:500;font-size:13px;}
+                    .nav a.active,.nav a:hover{background:#21262d;}
+                    form{display:flex;flex-direction:column;gap:24px;}
+                    .field{display:flex;flex-direction:column;gap:6px;}
+                    .field label{font-size:12px;font-weight:600;color:#7d8590;text-transform:uppercase;letter-spacing:.5px;}
+                    .field input,.field textarea{background:#0d1117;border:1px solid #30363d;color:#e6edf3;border-radius:6px;padding:8px 10px;font:13px inherit;resize:vertical;}
+                    .field input:focus,.field textarea:focus{outline:none;border-color:#2f81f7;box-shadow:0 0 0 1px #2f81f7;}
+                    .two-col{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;}
+                    .avatar-block{display:flex;align-items:center;gap:16px;}
+                    .avatar-block img{width:80px;height:80px;border-radius:50%;border:1px solid #30363d;}
+                    .save-bar{position:sticky;bottom:0;background:rgba(13,17,23,.9);backdrop-filter:blur(4px);padding:16px 0;margin-top:8px;border-top:1px solid #30363d;display:flex;justify-content:flex-end;}
+                    button.primary{background:#238636;color:#fff;border:1px solid #2ea043;font-weight:600;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;}
+                    button.primary:hover{background:#2ea043;}
+                    .section{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;display:flex;flex-direction:column;gap:24px;}
+                    .section h2{margin:0;font-size:16px;font-weight:600;}
+                    .flash{background:#1c4532;color:#7ee2b8;padding:10px 14px;border:1px solid #2ea043;border-radius:6px;font-size:12px;margin-bottom:12px;display:none;}
+                    .error{background:#471d21;color:#ffb1b8;padding:10px 14px;border:1px solid #da3633;border-radius:6px;font-size:12px;margin-bottom:12px;display:none;}
+                    .switch-row{display:flex;align-items:center;gap:12px;}
+                    .switch-row input{width:16px;height:16px;}
+                    .danger{border-color:#da3633;background:#271317;}
+                    .danger h2{color:#ffb1b8;}
+                    .danger button{background:#da3633;border:1px solid #ff7b72;}
+                    .danger button:hover{background:#ff7b72;}
+                    .inline-help{font-size:11px;color:#7d8590;}
+                </style></head><body>
+                                <div class='header' style='display:flex;justify-content:space-between;align-items:center;'>
+                                    <h1>Settings</h1>
+                                    <button id='logoutBtnHeader' style='background:#21262d;border:1px solid #30363d;color:#e6edf3;font-size:12px;padding:6px 12px;border-radius:6px;cursor:pointer;'>Logout</button>
+                                </div>
+                <div class='layout'>
+                   <nav class='nav'>
+                     <a href='#' class='active' data-section='profile'>Public profile</a>
+                     <a href='#' data-section='bio'>Bio</a>
+                     <a href='#' data-section='social'>Social</a>
+                     <a href='#' data-section='account'>Account</a>
+                     <a href='#' data-section='preferences'>Preferences</a>
+                     <a href='#' data-section='danger'>Danger Zone</a>
+                   </nav>
+                   <div id='contentArea'>
+                        <div id='flash' class='flash'></div>
+                        <div id='error' class='error'></div>
+                        <form id='profileForm'>
+                            <div class='section' data-section-panel='profile'>
+                                <h2>Public profile</h2>
+                                <div class='avatar-block'>
+                                    <img src='${me.data.avatar_url}' alt='avatar'/>
+                                    <div style='font-size:12px;color:#7d8590'>Avatar changes must be done on github.com</div>
+                                </div>
+                                <div class='two-col'>
+                                    <div class='field'>
+                                       <label for='name'>Name</label>
+                                       <input id='name' value="${(me.data.name||'').replace(/"/g,'&quot;')}">
+                                    </div>
+                                    <div class='field'>
+                                       <label for='company'>Company</label>
+                                       <input id='company' value="${(me.data.company||'').replace(/"/g,'&quot;')}">
+                                    </div>
+                                </div>
+                                <div class='two-col'>
+                                    <div class='field'>
+                                       <label for='location'>Location</label>
+                                       <input id='location' value="${(me.data.location||'').replace(/"/g,'&quot;')}">
+                                    </div>
+                                    <div class='field'>
+                                       <label for='blog'>Website</label>
+                                       <input id='blog' value="${(me.data.blog||'').replace(/"/g,'&quot;')}">
+                                    </div>
+                                </div>
+                                <div class='field'>
+                                   <label for='email'>Public Email</label>
+                                   <input id='email' value="${(me.data.email||'').replace(/"/g,'&quot;')}" placeholder='your@email.com'>
+                                </div>
+                                <div class='switch-row'>
+                                   <input type='checkbox' id='hireable' ${me.data.hireable? 'checked':''} />
+                                   <label for='hireable' style='margin:0;font-size:13px;font-weight:500;color:#e6edf3;'>Available for hire</label>
+                                </div>
+                            </div>
+                            <div class='section' data-section-panel='bio' style='display:none;'>
+                                <h2>Bio</h2>
+                                <div class='field'>
+                                    <label for='bio'>Bio</label>
+                                    <textarea id='bio' rows='5' placeholder='Tell us about yourself...'>${(me.data.bio||'').replace(/</g,'&lt;')}</textarea>
+                                </div>
+                            </div>
+                            <div class='section' data-section-panel='social' style='display:none;'>
+                                <h2>Social links</h2>
+                                <div class='field'>
+                                    <label for='twitter'>Twitter Username</label>
+                                    <input id='twitter' value="${(me.data.twitter_username||'').replace(/"/g,'&quot;')}">
+                                </div>
+                                <div class='inline-help'>Add additional social links via your README for now.</div>
+                            </div>
+                            <div class='section' data-section-panel='account' style='display:none;'>
+                                <h2>Account</h2>
+                                <div class='two-col'>
+                                   <div class='field'><label>Username</label><input value='${me.data.login}' disabled></div>
+                                   <div class='field'><label>User ID</label><input value='${me.data.id}' disabled></div>
+                                </div>
+                                <div class='two-col'>
+                                   <div class='field'><label>Created</label><input value='${new Date(me.data.created_at).toLocaleDateString()}' disabled></div>
+                                   <div class='field'><label>Updated</label><input value='${new Date(me.data.updated_at).toLocaleDateString()}' disabled></div>
+                                </div>
+                                <div class='inline-help'>Immutable profile metadata shown for reference.</div>
+                            </div>
+                            <div class='section' data-section-panel='preferences' style='display:none;'>
+                                <h2>Preferences (Extension)</h2>
+                                <div class='field'>
+                                   <label for='appearance'>Appearance</label>
+                                   <select id='appearance' style='background:#0d1117;border:1px solid #30363d;color:#e6edf3;border-radius:6px;padding:8px 10px;'>
+                                       <option value='system' ${localPrefs.appearance==='system'?'selected':''}>System</option>
+                                       <option value='dark' ${localPrefs.appearance==='dark'?'selected':''}>Dark</option>
+                                       <option value='light' ${localPrefs.appearance==='light'?'selected':''}>Light</option>
+                                   </select>
+                                </div>
+                                <div class='switch-row'>
+                                   <input type='checkbox' id='showPrivateRepos' ${localPrefs.showPrivateRepos? 'checked':''} />
+                                   <label for='showPrivateRepos' style='margin:0;font-size:13px;font-weight:500;color:#e6edf3;'>Show private repositories in profile views (local only)</label>
+                                </div>
+                                <div class='inline-help'>These preferences affect only this extension inside VS Code.</div>
+                            </div>
+                            <div class='section danger' data-section-panel='danger' style='display:none;'>
+                                <h2>Danger Zone</h2>
+                                <div class='field'>
+                                   <button type='button' id='refreshProfileBtn' class='primary' style='background:#8957e5;border:1px solid #a371f7;'>Refresh Profile Cache</button>
+                                   <div class='inline-help'>Forces refetch of repositories & stats in the profile panel.</div>
+                                </div>
+                                <div class='field'>
+                                   <button type='button' id='signOutBtn' style='background:#da3633;border:1px solid #ff7b72;color:#fff;font-weight:600;padding:8px 18px;border-radius:6px;cursor:pointer;'>Sign out of GitHub</button>
+                                   <div class='inline-help'>Signs you out of the GitHub authentication session in VS Code.</div>
+                                </div>
+                            </div>
+                            <div class='save-bar'><button class='primary' id='saveBtn' type='submit'>Save</button></div>
+                        </form>
+                   </div>
+                </div>
+                <script nonce='${nonce}'>
+                    const vscode = acquireVsCodeApi();
+                    const navLinks=[...document.querySelectorAll('.nav a')];
+                    const panels=[...document.querySelectorAll('[data-section-panel]')];
+                    navLinks.forEach(l=>l.addEventListener('click',e=>{e.preventDefault(); navLinks.forEach(x=>x.classList.remove('active')); l.classList.add('active'); const sec=l.dataset.section; panels.forEach(p=>{p.style.display=p.getAttribute('data-section-panel')===sec?'flex':'none';});}));
+                    const form=document.getElementById('profileForm');
+                    form.addEventListener('submit',e=>{e.preventDefault(); const payload={
+                        name: (document.getElementById('name')||{value:''}).value || null,
+                        company: (document.getElementById('company')||{value:''}).value || null,
+                        blog: (document.getElementById('blog')||{value:''}).value || null,
+                        location: (document.getElementById('location')||{value:''}).value || null,
+                        bio: (document.getElementById('bio')||{value:''}).value || null,
+                        twitter_username: (document.getElementById('twitter')||{value:''}).value || null,
+                        email: (document.getElementById('email')||{value:''}).value || null,
+                        hireable: (document.getElementById('hireable')||{checked:false}).checked || false
+                    }; vscode.postMessage({command:'updateProfile', payload}); vscode.postMessage({command:'updateLocalSettings', prefs:{appearance:(document.getElementById('appearance')||{value:'system'}).value, showPrivateRepos:(document.getElementById('showPrivateRepos')||{checked:true}).checked}});});
+                    document.getElementById('refreshProfileBtn')?.addEventListener('click',()=>{vscode.postMessage({command:'refreshProfileCache'});});
+                    document.getElementById('signOutBtn')?.addEventListener('click',()=>{vscode.postMessage({command:'signOut'});});
+                    document.getElementById('logoutBtnHeader')?.addEventListener('click',()=>{if(confirm('Logout from GitHub?')){vscode.postMessage({command:'signOut'});}});
+                    window.addEventListener('message',ev=>{const m=ev.data; if(m.command==='updateResult'){ const flash=document.getElementById('flash'); const err=document.getElementById('error'); if(m.ok){err.style.display='none'; flash.textContent='Profile updated successfully'; flash.style.display='block'; setTimeout(()=>flash.style.display='none',3000);} else {flash.style.display='none'; err.textContent=m.error||'Update failed'; err.style.display='block';}}});
+                </script>
+                </body></html>`;
+                panel.webview.html = html;
+                panel.webview.onDidReceiveMessage(async (m)=>{
+                    if(m.command==='updateProfile'){
+                        try {
+                            showExtensionGlobalLoader('Updating profile...');
+                            // Only send allowed fields; GitHub ignores null values if not provided
+                            const body: any = {};
+                            const allowed=['name','company','blog','location','bio','twitter_username','email','hireable'];
+                            for(const k of allowed){ if(m.payload[k] !== undefined) body[k]=m.payload[k]||null; }
+                            const res = await octokit.rest.users.updateAuthenticated(body);
+                            panel.webview.postMessage({command:'updateResult', ok:true});
+                        } catch(err:any){
+                            panel.webview.postMessage({command:'updateResult', ok:false, error: err.message});
+                        } finally { hideExtensionGlobalLoader(); }
+                    }
+                    else if(m.command==='updateLocalSettings') {
+                        try {
+                            await extensionContext.globalState.update('profileSettingsPrefs', m.prefs || {});
+                        } catch {}
+                    }
+                    else if(m.command==='refreshProfileCache') {
+                        vscode.commands.executeCommand('github-activity-dashboard.refreshProfile');
+                        panel.webview.postMessage({command:'updateResult', ok:true});
+                    }
+                    else if(m.command==='signOut') {
+                        try { await vscode.commands.executeCommand('github.signout'); } catch {}
+                        vscode.window.showInformationMessage('Signed out of GitHub. Reload window if session persists.');
+                    }
+                });
+            } catch(err:any){
+                vscode.window.showErrorMessage('Failed to open Settings: '+err.message);
             } finally {
                 hideExtensionGlobalLoader();
             }
@@ -3948,8 +4209,11 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                         <a href="#" class="HeaderMenu-link" id="exploreLink">Explore</a>
                     </nav>
                 </div>
-                <div class="AppHeader-user">
-                    <img class="avatar" src="${userData.avatar_url}" alt="${userData.login}" style="width: 32px; height: 32px;" />
+                <div style="display:flex;align-items:center;gap:12px;">
+                   <button id="logoutBtnProfile" style="background:#21262d;border:1px solid #30363d;color:#e6edf3;font-size:12px;padding:6px 12px;border-radius:6px;cursor:pointer;">Logout</button>
+                   <div class="AppHeader-user" title="Open Settings" style="display:flex;align-items:center;">
+                       <img id="headerProfileAvatar" class="avatar" src="${userData.avatar_url}" alt="${userData.login}" style="width: 32px; height: 32px; cursor:pointer;" />
+                   </div>
                 </div>
             </div>
 
@@ -4133,9 +4397,18 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                     console.log('[Profile] Marketplace link clicked, sending message');
                     vscode.postMessage({ command:'openMarketplace' });
                 }
+                function openSettings(e){
+                    try { e && e.preventDefault(); } catch(_){ /* ignore */ }
+                    console.log('[Profile] Avatar clicked -> open settings');
+                    vscode.postMessage({ command:'openSettings' });
+                }
                 // Attach Explore link handler (CSP-safe, replaces inline onclick)
                 try { document.getElementById('exploreLink')?.addEventListener('click', openExplore); } catch(_){ }
                 try { document.getElementById('marketplaceLink')?.addEventListener('click', openMarketplace); } catch(_){ }
+                // Avatar (top-right) opens settings
+                try { document.getElementById('headerProfileAvatar')?.addEventListener('click', openSettings); } catch(_){ }
+                // Logout button
+                try { document.getElementById('logoutBtnProfile')?.addEventListener('click', ()=>{ vscode.postMessage({ command:'signOut'}); }); } catch(_){ }
 
                 // Navigation Tabs
                 document.querySelectorAll('.UnderlineNav-item').forEach(t => t.addEventListener('click', () => {

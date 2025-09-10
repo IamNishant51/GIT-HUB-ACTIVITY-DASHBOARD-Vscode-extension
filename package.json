@@ -2,7 +2,7 @@
   "name": "github-activity-dashboard",
   "displayName": "GitHub Activity Dashboard",
   "description": "A dashboard to track your GitHub activity.",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "icon": "logo.png",
   "publisher": "NishantUnavane",
   "engines": {
@@ -165,6 +165,11 @@
         "command": "github-activity-dashboard.openMarketplaceView",
         "title": "Open GitHub Marketplace",
         "icon": "$(extensions-view-icon)"
+      }
+      ,{
+        "command": "github-activity-dashboard.openProfileSettings",
+        "title": "Open GitHub Profile Settings",
+        "icon": "$(gear)"
       }
     ],
     "menus": {

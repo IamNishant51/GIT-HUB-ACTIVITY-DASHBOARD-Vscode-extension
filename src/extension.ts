@@ -6,9 +6,6 @@ import { getCreateRepoWebviewContent, getRepoExplorerWebviewContent } from './cr
 // Global variables to track panels
 let activeProfilePanel: vscode.WebviewPanel | undefined;
 
-// --- Global Loader Broadcast Utilities ---
-// These functions send loader show/hide messages to the active profile webview so
-// that a unified overlay spinner can appear during any long-running command.
 let __globalLoaderDepth = 0;
 function showExtensionGlobalLoader(text: string = 'Loading...') {
     __globalLoaderDepth++;
@@ -1208,6 +1205,14 @@ export function activate(context: vscode.ExtensionContext) {
                         case 'createRepo':
                             vscode.commands.executeCommand('github-activity-dashboard.createRepo');
                             break;
+                        case 'openExplore':
+                            try {
+                                vscode.window.showInformationMessage('Opening Explore view...');
+                                await vscode.commands.executeCommand('github-activity-dashboard.openExploreView');
+                            } catch (err:any){
+                                vscode.window.showErrorMessage('Failed to open Explore: '+err.message);
+                            }
+                            break;
                         case 'openRepo':
                             showExtensionGlobalLoader('Opening repository...');
                             try {
@@ -1892,6 +1897,114 @@ export function activate(context: vscode.ExtensionContext) {
             `;
         }
     });
+
+        // Lightweight Explore view (GitHub-like) showing trending repositories (approx via search) and user repos
+        vscode.commands.registerCommand('github-activity-dashboard.openExploreView', async () => {
+                try {
+                        showExtensionGlobalLoader('Opening Explore...');
+                        const session = await vscode.authentication.getSession('github', ['repo','read:user'], { createIfNone: true });
+                        const octokit = new Octokit({ auth: session.accessToken });
+
+                        // Fetch user for personalization
+                        const me = await octokit.rest.users.getAuthenticated();
+
+                        // Approximate trending: search most starred repos created in last 30 days
+                        const since = new Date(Date.now() - 1000*60*60*24*30).toISOString().split('T')[0];
+                        const trending = await octokit.rest.search.repos({ q: `created:>${since}`, sort: 'stars', order: 'desc', per_page: 10 });
+
+                        // User starred (for highlight)
+                        let starred: any[] = [];
+                        try { const s = await octokit.rest.activity.listReposStarredByAuthenticatedUser({ per_page: 100, sort: 'created' }); starred = s.data; } catch {}
+                        const starredSet = new Set(starred.map(r=>r.full_name));
+
+                        // User own top repos
+                        const myRepos = await octokit.rest.repos.listForAuthenticatedUser({ per_page: 10, sort: 'updated' });
+
+                        const nonce = getNonce();
+                        const panel = vscode.window.createWebviewPanel('githubExplore','Explore · GitHub',vscode.ViewColumn.One,{ enableScripts:true });
+                        const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${panel.webview.cspSource} https: data:; style-src ${panel.webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';"><title>Explore</title><style>
+                                body{margin:0;font:14px -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:#0d1117;color:#e6edf3;}
+                                .explore-header{display:flex;align-items:center;gap:16px;padding:16px 32px;border-bottom:1px solid #30363d;background:#161b22;}
+                                h1{font-size:20px;margin:0;font-weight:600;}
+                                .layout{display:grid;grid-template-columns:1fr 320px;gap:24px;padding:24px;max-width:1400px;margin:0 auto;}
+                                .card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:12px;}
+                                .repo-item{border-bottom:1px solid #30363d;padding:10px 0;display:flex;flex-direction:column;gap:4px;}
+                                .repo-item:last-child{border-bottom:none;}
+                                .repo-name{font-weight:600;color:#2f81f7;cursor:pointer;text-decoration:none;}
+                                .repo-name:hover{text-decoration:underline;}
+                                .meta{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:#7d8590;}
+                                .lang-dot{width:12px;height:12px;border-radius:50%;display:inline-block;margin-right:4px;vertical-align:middle;}
+                                .star-btn{background:#21262d;border:1px solid #30363d;color:#e6edf3;font-size:12px;padding:3px 10px;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;}
+                                .star-btn.starred{background:#2f81f7;border-color:#2f81f7;color:#fff;}
+                                .section-title{margin:0 0 4px 0;font-size:16px;font-weight:600;}
+                                .search-box{width:100%;padding:8px 12px;border:1px solid #30363d;border-radius:6px;background:#0d1117;color:#e6edf3;margin-top:4px;}
+                                .aside-section{display:flex;flex-direction:column;gap:16px;}
+                                .badge{background:#30363d;border-radius:2em;padding:2px 8px;font-size:11px;}
+                        </style></head><body>
+                        <div id="globalLoaderOverlay" style="position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(13,17,23,.85);backdrop-filter:blur(2px);z-index:4000;">
+                                <div class="gh-loader-shell" style="display:flex;flex-direction:column;align-items:center;gap:18px;">
+                                        <div class="gh-loader-ring" style="width:70px;height:70px;border:4px solid rgba(255,255,255,0.12);border-top-color:#2f81f7;border-radius:50%;animation:ghSpin .9s linear infinite;display:flex;align-items:center;justify-content:center;">
+                                                <svg viewBox="0 0 16 16" width="40" height="40" aria-hidden="true" class="gh-loader-icon" style="color:#2f81f7;filter:drop-shadow(0 0 4px rgba(47,129,247,.6));animation:ghIconPulse 3s ease-in-out infinite;">
+                                                        <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2 .37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+                                                </svg>
+                                        </div>
+                                        <div id="globalLoaderText" style="font:600 12px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#e6edf3;letter-spacing:.5px;text-transform:uppercase;">Loading...</div>
+                                </div>
+                                <style>@keyframes ghSpin{to{transform:rotate(360deg)}}@keyframes ghIconPulse{0%,100%{opacity:.85}50%{opacity:1}}</style>
+                        </div>
+                        <div class="explore-header"><h1>Explore</h1><span class="badge">Preview</span></div>
+                        <div class="layout">
+                            <div class="main-column">
+                                <div class="card">
+                                    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+                                        <div>
+                                            <div class="section-title">Trending repositories</div>
+                                            <div style="font-size:12px;color:#7d8590;">Created in the last 30 days</div>
+                                        </div>
+                                        <input id="trendSearch" class="search-box" placeholder="Filter trending..." />
+                                    </div>
+                                    <div id="trendingList">
+                                        ${trending.data.items.map(r=>{ const ownerLogin = (r.owner && r.owner.login) ? r.owner.login : 'unknown'; const desc = (r.description||'').replace(/`/g,'\`').replace(/</g,'&lt;'); return `
+                                            <div class='repo-item' data-name='${r.full_name.toLowerCase()}'>
+                                                <a class='repo-name' href='#' onclick="openRepo('${ownerLogin}','${r.name}')">${r.full_name}</a>
+                                                ${desc?`<div style='font-size:12px;color:#7d8590;'>${desc}</div>`:''}
+                                                <div class='meta'>
+                                                    ${r.language?`<span><span class='lang-dot' style='background:${getLanguageColor(r.language)}'></span>${r.language}</span>`:''}
+                                                    <span>⭐ ${r.stargazers_count}</span>
+                                                    <span>🍴 ${r.forks_count}</span>
+                                                    <span>⬆ ${r.updated_at.split('T')[0]}</span>
+                                                </div>
+                                                <div>
+                                                    <button class='star-btn ${starredSet.has(r.full_name)?'starred':''}' onclick="toggleStar(event,'${ownerLogin}','${r.name}',${starredSet.has(r.full_name)})">${starredSet.has(r.full_name)?'★ Starred':'☆ Star'}</button>
+                                                </div>
+                                            </div>`; }).join('')}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="aside-section">
+                                <div class="card">
+                                    <div class="section-title">Your recent repositories</div>
+                                    ${myRepos.data.map(r=>`<div class='repo-item' style='border:none;padding:6px 0;'>
+                                        <a class='repo-name' href='#' onclick="openRepo('${r.owner?.login}','${r.name}')">${r.name}</a>
+                                        <div class='meta'>${r.language?`<span><span class='lang-dot' style='background:${getLanguageColor(r.language)}'></span>${r.language}</span>`:''}<span>⭐ ${r.stargazers_count}</span></div>
+                                    </div>`).join('')}
+                                </div>
+                            </div>
+                        </div>
+                        <script nonce='${nonce}'>
+                            const vscode = acquireVsCodeApi();
+                            function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
+                            function openRepo(owner, name){vscode.postMessage({command:'openRepo', owner:owner, repo:name});}
+                            function toggleStar(ev, owner, repo, currently){ev.preventDefault();ev.stopPropagation(); if(currently){vscode.postMessage({command:'unstarRepository', owner, repo}); ev.target.textContent='☆ Star'; ev.target.classList.remove('starred');} else {vscode.postMessage({command:'starRepository', owner, repo}); ev.target.textContent='★ Starred'; ev.target.classList.add('starred');}}
+                            document.getElementById('trendSearch').addEventListener('input', e=>{ const v=e.target.value.toLowerCase(); document.querySelectorAll('#trendingList .repo-item').forEach(it=>{it.style.display= it.dataset.name.includes(v)?'flex':'none';}); });
+                        </script></body></html>`;
+                        panel.webview.html = html;
+                } catch (err:any){
+                        vscode.window.showErrorMessage('Failed to open Explore: '+err.message);
+                } finally {
+                        hideExtensionGlobalLoader();
+                }
+        });
 }
 
 function getLanguageFromExtension(filePath: string): string {
@@ -3734,7 +3847,7 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                         <a href="#" class="HeaderMenu-link">Issues</a>
                         <a href="#" class="HeaderMenu-link">Codespaces</a>
                         <a href="#" class="HeaderMenu-link">Marketplace</a>
-                        <a href="#" class="HeaderMenu-link">Explore</a>
+                        <a href="#" class="HeaderMenu-link" id="exploreLink">Explore</a>
                     </nav>
                 </div>
                 <div class="AppHeader-user">
@@ -3912,6 +4025,13 @@ function getProfileWebviewContent(webview: vscode.Webview, userData: any, reposi
                         if(m.action === 'hide') { overlay && (overlay.style.display='none'); }
                     }
                 });
+                function openExplore(e){
+                    try { e && e.preventDefault(); } catch(_){ /* ignore */ }
+                    console.log('[Profile] Explore link clicked, sending message');
+                    vscode.postMessage({ command:'openExplore' });
+                }
+                // Attach Explore link handler (CSP-safe, replaces inline onclick)
+                try { document.getElementById('exploreLink')?.addEventListener('click', openExplore); } catch(_){ }
 
                 // Navigation Tabs
                 document.querySelectorAll('.UnderlineNav-item').forEach(t => t.addEventListener('click', () => {

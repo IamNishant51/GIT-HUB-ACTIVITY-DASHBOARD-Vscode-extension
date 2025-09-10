@@ -156,6 +156,11 @@
         "title": "Refresh",
         "icon": "$(refresh)"
       }
+      ,{
+        "command": "github-activity-dashboard.openExploreView",
+        "title": "Open GitHub Explore",
+        "icon": "$(globe)"
+      }
     ],
     "menus": {
       "view/title": [
